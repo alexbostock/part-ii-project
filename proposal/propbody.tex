@@ -1,0 +1,278 @@
+\setlength{\parindent}{0em}
+\addtolength{\parskip}{1ex}
+
+\vfil
+
+\centerline{\Large Computer Science Tripos Part II Project Proposal}
+\vspace{0.4in}
+\centerline{\Large A Comparison of Consistency Models in Distributed Database Systems}
+\vspace{0.4in}
+\centerline{\large A.~T.~Bostock, Churchill College}
+\vspace{0.3in}
+\centerline{\large Originator: A.~T.~Bostock }
+\vspace{0.3in}
+\centerline{\large 18 October 2018}
+
+\vfil
+
+\vspace{0.2in}
+
+\noindent
+{\bf Project Supervisor:} Dr J.~K.~Fawcett
+\vspace{0.2in}
+
+\noindent
+{\bf Director of Studies:} Dr J.~K.~Fawcett
+\vspace{0.2in}
+\noindent
+ 
+\noindent
+{\bf Project Overseers:} Prof J.~M.~Bacon, Prof R.~J.~Anderson \& Dr A.~S.~Prorok
+
+\vfil
+\pagebreak
+
+% Main document
+
+\section*{Introduction}
+
+Distributed database systems are widely used for internet-scale applications. By splitting vulnerabilities across many nodes, we can build systems that continue to function when some nodes are unavailable.
+
+A key limitation for distributed database systems is the CAP theorem: it is impossible to build a system with all 3 of consistency, availability and partition-tolerance. When designing a system, we have to choose the most important properties.
+
+Given the de-centralised nature of the Internet, internet-scale systems need to be partition-tolerant. This means we have a trade-off between consistency and availability. In a critical system, such as a bank's ledger, consistency is most important. In other cases, it may be desirable to sacrifice strong consistency for better availability.
+
+Consider the design of a social networking platform, which allows users to add posts, and serves those posts to other users. For user-experience, it is probably better to serve whatever posts are immediately available, possibly missing the most recent posts, rather than failing to serve any data. It is probably acceptable to have a few seconds delay before a new post is visible to all users.
+
+In this system, we want eventual consistency, where all updates will be available after some time, but not necessarily immediately. This is a weak guarantee. In reality, we probably want new posts to be completely available in less than 1 minute in the vast majority of cases.
+
+My project will explore how quickly an eventually consistent system can reach consensus, and how resource usage differs between a strongly consistent system and an eventually consistent system.
+
+\section*{Work to Be Done}
+
+I will build a strongly consistent, distributed key-value store based on quorum assembly. The system will store data on a fixed number of nodes, with all data replicated across every node. This will include:
+
+\begin{itemize}
+  \item
+  Quorum assembly: requiring a minimum number of nodes be involved in every read and write transaction, and each node involved in a transaction be locked. This ensures serialisability of transactions, by preventing any transaction from accessing data concurrently with another transaction modifying the same data.
+
+  \item
+  As part of quorum assembly, an atomic commit protocol is needed, to assure that values are either written to a whole write quorum, or not written at all. For this, I will implement the two-phase commit protocol (2PC).
+
+  \item
+  To track which nodes have stale data, I will build a vector clock system.
+
+\end{itemize}
+
+The system will be designed in a modular fashion, so that each component can be replaced to make a new version of the system with different characteristics.
+
+I will build, as a module, a sloppy quorum system. Using this, I will build an eventually consistent variant of the database system.
+
+I will build a test framework to test and evaluate the systems. This should simulate a network of nodes using one machine. It should be able to:
+
+\begin{itemize}
+  \item
+  Simulate an unreliable network, including random latency and packet loss.
+
+  \item
+  Simulate failure of individual nodes.
+
+  \item
+  Randomly generate streams of requests, and send them to the system. Requests generated should simulate those from a social network application: many read transactions, a smaller (but still large) number of transactions adding a new key (and value), and a small number of transactions modifying or removing an existing key. Requests should be sent randomly, at a given average rate (following a Poisson distribution).
+
+  %\item
+  % The system should also be able to send any given sequence of requests. For example, to measure time to reach consistency in an eventually consistent system, I could send a write transaction, and then repeatedly send read transactions to each node, to measure the time to reach consistency.
+
+  \item
+  Record data for each request sent: request data, request timestamp, and response data and timestamp (if a response is received).
+
+\end{itemize}
+
+Alongside the metrics reported by my test framework, I can use profiling tools to measure resource usage by different parts of the system.
+
+I will evaluate the strongly-consistent and eventually-consistent variants of the system using some or all of the following metrics:
+
+\begin{itemize}
+  \item
+  System throughput: average time taken to process a large number of requests.
+
+  \item
+  For the eventually consistent version, time taken to reach consistency.
+
+  \item
+  CPU and memory usage of each node (and average across all nodes).
+
+\end{itemize}
+
+Each of those can be measured for different numbers of nodes, different quorum (or sloppy quorum) sizes, different rates of transactions, different network conditions, and different scenarios involving node failures.
+
+I will implement the project using Go. Go is a fast, compiled language, making it ideal for low-level systems projects. It is also statically typed, and uses garbage collection, so it is safer and easier to work with than C, a commonly-used language for systems programming. Go also has good support for concurrent programming, which will be helpful for building a test framework, using concurrent components to simulate a distributed system.
+
+\subsection*{Success Criteria}
+
+This project will be considered a success if I have done all of the following:
+
+\begin{itemize}
+  \item
+  Built a strongly consistent distributed key-value store. This system must, when tested with 5 nodes:
+
+  \begin{itemize}
+    \item
+    Support get and put operations. \verb|put(key, value)| must either successfully store the given key and value, or error. \verb|get(key)| must either return the most recently put value for the given key, or error.
+
+    \item
+    Continue to function properly after 2 nodes have failed.
+
+  \end{itemize}
+
+  \item
+  Built a variant of that system which is eventually consistent.
+
+  \item
+  Evaluated the throughput of each system when using different numbers of nodes, and different rates of transactions.
+
+  \item
+  Evaluated the time taken for a value written to the eventually consistent system to be completely available, under different network conditions.
+
+\end{itemize}
+
+\subsection*{Extensions}
+
+\begin{itemize}
+  \item
+  Implement three-phase commit (3PC), and evaluate the performance of the system when using 3PC compared to 2PC.
+
+  \item
+  Explore and evaluate methods for optimising the sloppy quorum system to minimise the time to reach consistency.
+
+  \item
+  Explore different data structures for storing data on each node, and evaluate their performance, including how significant the choice of data structure is compared to the design of the distributed components of the system.
+
+\end{itemize}
+
+\section*{Starting Point}
+
+I have some experience using Go, having previously used it for a personal project (implementing a regular expression processor).
+
+I have previously studied distributed systems in the IB course Concurrent and Distributed Systems.
+
+\section*{Resources Required}
+
+I will use my personal laptop (2017 MacBook Pro). I accept full responsibility for this machine and I have made contingency plans to protect myself against hardware and/or software failure.
+
+ I will use git and GitHub for version control, Backblaze for cloud backup, and an external disk for additional weekly backups.
+
+I will use Go to implement my project, so I will use its open-source compiler and tools.
+
+In case of failure of my machine, I can restore from one of the backups, and continue working by logging onto a remote private server on Digital Ocean (on which I can install Go tools and my preferred editor, Kakoune), using an MCS machine. This should allow me to continue working with minimal interruption.
+
+\section*{Timetable}
+
+\subsection*{18 Oct - 31 Oct}
+Produce a detailed design of the system, presented as a document which can be used later when writing the preparation and implementation chapters of the dissertation.
+
+\textbf{Milestone:} Specification document completed, and approved by supervisor.
+
+
+\subsection*{1 Nov - 14 Nov}
+Build a basic test framework, so that I can use it to test the distributed database system.
+
+\textbf{Milestone:} A basic test framework complete, with support for running multiple nodes, generating test transactions, and verifying that system output is as expected.
+
+
+\subsection*{15 Nov - 28 Nov}
+Implement quorum assembly, including 2PC.
+
+\textbf{Milestone:} All tests passing for the quorum assembly module.
+
+
+\subsection*{29 Nov - 12 Dec}
+Build a strongly consistent key-value store, based on quorum assembly.
+
+\textbf{Milestone:} Key-value store implemented, all tests passing.
+
+
+\subsection*{13 Dec - 26 Dec}
+Slack time / work on extensions.
+
+\textbf{Milestone:} All tests passing for the strongly consistent database.
+
+
+\subsection*{27 Dec - 9 Jan}
+No work around Christmas time.
+
+\subsection*{10 Jan - 23 Jan}
+Write a progress report.
+
+Prepare a presentation.
+
+\textbf{Milestone:} Progress report submitted (by 12:00 1 February).
+
+\textbf{Milestone:} Presentation prepared.
+
+\subsection*{24 Jan - 6 Feb}
+
+Extend the database system to use a sloppy quorum system, to provide eventual consistency.
+
+\textbf{Milestone:} Presentation delivered.
+
+\textbf{Milestone:} All tests passing for the sloppy quorum version.
+
+
+\subsection*{7 Feb - 20 Feb}
+
+Extend the testing framework to simulate different conditions and provide system metrics, as required for evaluation.
+
+Evaluate the strongly consistent and eventually consistent versions of the system.
+
+Write a draft evaluation chapter for the dissertation.
+
+\textbf{Milestone:} Draft evaluation chapter written, and sent to supervisor for feedback.
+
+
+\subsection*{21 Feb - 6 Mar}
+
+Write an outline dissertation, including important figures and a summary of each section's content.
+
+\textbf{Milestone:} Outline dissertation complete, and sent to supervisor for feedback.
+
+
+\subsection*{7 Mar - 20 Mar}
+
+Slack time / work on extensions.
+
+\textbf{Milestone:} All success criteria met.
+
+
+\subsection*{21 Mar - 3 Apr}
+
+Write dissertation: preparation and implementation chapters.
+
+\textbf{Milestone:} Preparation and implementation chapters complete, and sent to supervisor for feedback.
+
+
+\subsection*{4 Apt - 17 Apr}
+
+Write dissertation: all remaining chapters.
+
+Make changes to implementation and evaluation chapters based on feedback.
+
+\textbf{Milestone:} Dissertation complete, and sent to supervisor/DoS for feedback.
+
+
+\subsection*{18 Apr - 1 May}
+
+Make changes to dissertation based on feedback.
+
+Slack time / work on extensions.
+
+\textbf{Milestone:} Dissertation complete, including changes based on feedback.
+
+
+\subsection*{2 May - 15 May}
+
+Slack time.
+
+\textbf{Milestone:} Dissertation submitted (by 12:00 17 May).
+
+
