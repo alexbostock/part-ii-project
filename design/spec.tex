@@ -1,0 +1,270 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage{fullpage}
+\usepackage{fancyhdr} %headers
+\usepackage{titlesec}
+\usepackage{graphicx} %images
+\usepackage{amsmath} %maths
+\usepackage{amssymb} %maths symbols
+\usepackage{subfig}
+\usepackage[section]{placeins}
+\usepackage{listings}
+\usepackage[T1]{fontenc}
+\usepackage{lastpage}
+
+\usepackage{enumerate}
+
+\usepackage{braket}
+
+\renewcommand{\headrulewidth}{0pt}
+
+\nonstopmode
+
+\setlength{\headheight}{15pt}
+
+\graphicspath{ {img/} }
+
+%\titleformat{name=\section}
+%  {\normalfont\scshape}{\thesection}{1em}{\large}
+
+\titleformat{name=\section}
+  {\normalfont\large\scshape}{\thesection}{1em}{}
+
+\titleformat{name=\subsection}
+    {\normalfont\normalsize}{\thesubsection}{1em}{\large}
+
+%%\titleformat{\subsubsection}
+%  {\normalfont\normalsize}{\thesubsubsection}{1em}{}
+
+\setlength{\parindent}{0em}
+\addtolength{\parskip}{1ex}
+
+\lstset{
+	basicstyle=\scriptsize,
+	breaklines=true
+}
+
+\pagestyle{fancy}
+\setlength{\headsep}{0.2in}
+\title{Part II Project: Design Specification}
+\author{Alex Bostock}
+
+\date{}
+\fancyhf{}
+%\lhead{Summer Work IB/II}
+%\rhead{atb46}
+
+\cfoot{\thepage / \pageref{LastPage}}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\section*{Introduction}
+
+% TODO: Basic description (mainly from proposal)
+
+\section*{Public Interface}
+
+My system will implement the following public methods, which a client can call on any database node.
+
+% TODO: define types
+% TODO: put(key, null) to delete
+
+\begin{itemize}
+  \item
+  \verb|put(key, value)| should either store the given key and value in the system, or error.
+
+  \item
+  \verb|get(key)| should either return a value associated with the given key, or error. Note that which particular values may be returned depends on the variant of the system. More detail below.
+
+\end{itemize}
+
+% TODO: Bacon book for methods for managing nodes
+
+\subsection*{CAP Guarantees}
+
+My system should be partition-tolerant, since that property is nearly always required for internet-scale systems.
+
+The strongly consistent variant should provide consistency. This means that a get request may never return a stale value; it must either error, or return the most recently put value for the given key.
+
+The eventually consistent variant provides a much weaker guarantee. Any value returned by a get must be a value which has previously been the put, but not necessarily the most recent value. After an indefinite amount of time without any put requests, all get requests should return the same values. Although there is no guaranteed time limit, the system should aim to minimise the time taken to reach consistency.
+
+% TODO: more detail
+
+\subsection*{Remote Procedure Calls}
+
+For distributed systems, in general, clients making requests are not directly connected; they can only communicate using an unreliable network. Given this limitation, some system is needed to encapsulate procedure calls. Such systems are often based on http, due to its wide usage on the Internet.
+
+One method is representational state transfer (REST), which is based on the concept of resources. The URL should contain the name of a resource, and the type of operation should be indicated by the http verb (GET, POST, PUT etc.) used. This works well with create, read, update and delete (CRUD) operations. Such operations are meaningful in database systems.
+
+% TODO: write this better
+
+One drawback of REST is its inefficiency. http is based on text. Text encodings are very inefficient. A solution which can solve this is an RPC library, which can encode data as binary, such as Java's RPC system.
+
+For this project, I will not use any RPC solution which would be used in a real deployment. Since I am going to run the whole system on a single machine, I can use a much simpler RPC mechanism. http (using tcp) provides support for (mostly) reliable communication over unreliable networks, using checksums and re-transmission. On a single machine, I will have a reliable simulated network, so tcp is unnecessary, and would add additional complexity and latency to the system.
+
+In order to evaluate my system, I need to be able to add variable latency and packet loss to simulate different network conditions. By minimising the latency of my RPC service, there will be minimal noise affecting my measurements.
+
+\section*{System Overview}
+
+My system will be built so that it interfaces closely with my test framework, using my RPC system. This will provide an ideal environment for unit tests, integration tests, and evaluating the system. The architecture is based on two of Go's concurrency primitives: goroutines and channels.
+
+Goroutines are similar to threads. Rather than using OS-level scheduling, the Go runtime has its own scheduler. Goroutines, unlike normal threads, have dynamically-sized stacks. Typically, threads have a stack size around 1MB. This means that the number of active threads is limited by memory usage. Using a smaller stack allows more threads, but limits the number of stack frames before a stack overflow error. Using dynamically-sized stacks, the number of active goroutines can be much larger.
+
+Channels in Go are essentially thread-safe queue structures. These are ideal for producer-consumer patterns. Consumers can easily poll the queue, blocking until a value is available. My design uses channels to simulate network links.
+
+Each database node will run as its own goroutine. The system will support a fixed number of nodes, so each node will be identified by a unique integer. These will be assigned sequentially and remain constant, so they can be used as addresses in the simulated network.
+
+For each database, there will be two channels: one for incoming messages, and one for outgoing messages. A message may be a request from a (simulated) external, a response to such a request, or a message used to coordinate nodes in the system.
+
+% TODO: detailed structure of messages
+
+Supporting each database node, there will be an additional goroutine responsible for delivering its outgoing messages. This will use the following algorithm:
+
+\begin{lstlisting}
+while true:
+    message = outgoingMessages.poll() // Blocking deque
+
+    // Chance of packet loss, based on a given parameter
+    if (uniform random value in range [0,1]) < x:
+        continue
+
+    // Random latency
+    delay = (normal random value, for given mean and variance)
+    sendAfterDelay(message, delay)
+\end{lstlisting}
+
+The \verb|sendAfterDelay| method spawns a new goroutine, which sleeps for the given time, then appends the message to the recipient's incoming queue. This means that the main loop will not block, so later messages will be delivered without uncontrolled delay.
+
+The main routine will be responsible for simulating clients. This includes generating requests, sending these requests to random database nodes, and recording responses. For each request, it should record the time from request to response (if a response was received). If a request times out without a response, this should also be recorded.
+
+Once all requests have either timed out or been responded to, the main routine will terminate (thus halting the whole system). By configuring the number and type of tests and recording responses (as well as configuring the network properties, as described above), this can be used for both integration testing and evaluating the system's performance.
+
+% TODO: diagram
+
+\section*{Key Components}
+
+\subsection*{Data Storage}
+
+\subsection*{ACID Properties}
+
+When executing a stream of database transactions, we want those transactions to have ACID properties: atomicity, consistency, isolation and durability.
+
+Atomicity means that a transaction is either completed either entirely or not at all. This is a particular challenge in distributed systems since, for example, a write operation (usually) requires a write operation on each of many nodes.
+
+Consistency means that a transaction changes the system from one valid state to another. Note that this is distinct from the notion of consistency in the CAP theorem.
+
+Isolation means that the state of the database after executing a stream of transactions is the same as it would be if those transactions were all executed sequentially. Although this can be achieved by executing transactions sequentially, we usually want to parallellise transactions where possible, for performance reasons.
+
+Durability means that, once a transaction has been committed, it will remain committed, even in the case of a system failure. This generally means that a transaction or its effects are written to non-volatile memory and, in the case of distributed systems, are written across multiple nodes.
+
+In order to achieve durability, my system uses quorum assembly, to ensure that all writes are written across many nodes. Quorum assembly also ensures strong consistency, in the CAP sense.
+
+Since quorum assembly involves writing values to many nodes, this requires atomicity. This is mostly achieved using two phase commit (2PC).
+
+To ensure isolation, my system uses vector clocks. This way, it can establish an order of transactions, despite not having a synchronised clock.
+
+\subsection*{Distributed Systems}
+
+There are 4 key challenges associated with distributed systems: concurrency, independent failure of different parts of the system, unreliable networks, and no global concept of time.
+
+Concurrency issues occur when parts of a system are not synchronised, and are competing for the same resources. This is usually solved by requiring that shared resources are locked before use (and locks are released afterwards).
+
+Independent failure of components relates to a key benefit of distributed systems: a single failure does not necessarily mean total failure of a system. Despite this, extra work is required to ensure that the system remains in a consistent state, and remains available in the presence of failures.
+
+Nodes are, in general, connected only by unreliable networks. This means that communication between nodes involves a variable amount of latency, and some messages will not be delivered. In particular, there is no perfect method to determine whether a particular message has been lost, or just delayed (see the two generals problem).
+
+Nodes in a distributed system do not have synchronised clocks. Although network time protocol (NTP) can be used to synchronise clocks across a network to within some error margin (depending on network latency), the error margin means that local time cannot be relied upon. This makes it difficult to establish the order in which several events occurred.
+
+%%%%%
+%%%%%
+% TODO: clearly define objectives, and describe how in terms of those (rather than ACID/CAP/challenges of distributed systems)
+%%%%%
+%%%%%
+
+\subsection*{Quorum Assembly}
+
+Quorum assembly is used to enforce strong consistency, ensuring that every read operation can access the most recently written data, and preventing concurrent modifications to different copies of the same data.
+
+Given a system of $n$ nodes, we first have to define two values $V_R$ and $V_W$, which are the sizes of read and write quorums, respectively. At least $V_R$ nodes must be involved in every rad transaction, and at least $V_W$ nodes must be involved in every write. We also enforce the following constraints:
+
+$$V_W > n / 2$$
+
+$$V_R + V_W > n$$
+
+The first constraint means that every value written to the database must be written to a majority of database nodes. The second constraint means that, for any read quorum, at least one node will have the most recent version of every value in the database. Note that a vector clock system is also required to determine, given multiple different versions of the same value, which version is the most recent.
+
+The procedure for a read transaction is:
+
+\begin{itemize}
+  \item
+  A node receives a read request from the client. This node shall be the coordinator.
+
+  \item
+  Assemble a quorum of at least $V_R$ nodes, and obtain a lock on each node in the quorum.
+
+  \item
+  The coordinator queries each node in the quorum for the required value.
+
+  \item
+  Using a vector clock system, the coordinator determines the most recent value, and returns that value to the client.
+
+  \item
+  The coordinator releases all locks
+
+\end{itemize}
+
+Note that this may reach a deadlock condition. Suppose there are multiple concurrent transactions, concurrently acquiring locks on nodes. This may reach a condition where every node is locked, but no coordinator has assembled a complete quorum.
+
+There also be a problem if the coordinator fails before it releases locks. This would leave nodes permanently locked, and effectively useless.
+
+To fix both of these problems, each node should set a timer when its lock is acquired, and reset that timer each time it responds to a request from the coordinator. If the timer runs out, it should release its lock. If it subsequently receives a request from the coordinator, it should return an error. The coordinator, if it receives an error, should abort and retry the transaction.
+
+The procedure for write transactions is similar to that for reads, but requires additional work to ensure atomicity. When a value is written, it must be either written to a full write quorum, or not written at all. This is achieved using an atomic commit protocol, 2 phase commit (2PC).
+
+In 2PC, the coordinator for sends a transaction to all other nodes. This needs to include:
+
+\begin{itemize}
+  \item
+  The key and value to be written.
+
+  \item
+  A list of all nodes involved in the transaction (as an ordered list of node IDs).
+
+  \item
+  The coordinator's vector clock for the relevant key.
+
+\end{itemize}
+
+Each node should then execute the transaction, writing the new value to persistent storage but not yet committing. It should save a new vector clock value with the new value, which is the merge of its existing vector for the key, and the vector clock from the coordinator. It should then respond to the coordinator with a yes vote, and a copy of its new vector clock for the key. In case of any failure, it should respond with a no vote, and can cancel the transaction.
+
+If the coordinator receives a yes vote from every node, it should:
+
+\begin{itemize}
+  \item
+  Something about vector clocks.
+
+  \item
+  Send a commit message to each node.
+
+  \item
+  Wait for an acknowledgement from each node.
+
+  \item
+  When it receives an acknowledgement from every node, commit the transaction to its own disk.
+
+\end{itemize}
+
+If the coordinator doesn't receive a yes vote from every node (either at least one no vote, or a response times out), it should send a rollback message to all nodes.
+
+\subsection*{Vector Clocks}
+
+In a distributed system, there is no universal clock. While we can synchronise clocks to within some error margin using NTP, this does not guarantee that timestamps match the actual order in which events occur. Instead, we can use vector clocks.
+
+My system is limited to have $n$ database nodes, each identifiable by unique, sequential integers. Given this, vector clock values are just $n$-tuples of integers, with the $i$th value in the tuple corresponding to node $i$. We can then define happens-before relationships:
+
+If we have two vector clocks $x$ and $y$, and $\forall i \in \mathbb{N}, i \geq 0, i < n . x_i \leq y_i$, then $x$ happens-before $y$. Given two vector clocks, there are 3 possible cases: $x$ happens-before $y$, $y$ happens-before $x$, or neither. In the case of neither, both events happened concurrently; there is no way to tell the order in which they happened.
+
+In a strongly consistent system, we always need to know, given multiple conflicting values for the same key, which is the most recent. This means that two vector clocks for the same key must never show writes that happened concurrently. This is guaranteed by the size of a write quorum being greater than half the number of database nodes. In any write quorum, there must be at least one node with the most recent value for the required key, so we can always assign a new clock value which happens after that.
+
+\end{document}
