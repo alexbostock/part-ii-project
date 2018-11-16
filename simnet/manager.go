@@ -50,8 +50,10 @@ func sendTests(numNodes uint, outgoing chan message) {
 		msg := message{
 			int(numNodes),
 			int(i),
-			clientRequest,
-			int(i * i),
+			clientReadRequest,
+			make([]byte, 0),
+			make([]byte, 0),
+			true,
 		}
 
 		log.Printf("Request sent\t%+v", msg)
