@@ -11,6 +11,7 @@ const (
 )
 
 type message struct {
+	id       int
 	src      int
 	dest     int
 	demuxKey messagetype

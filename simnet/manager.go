@@ -66,6 +66,7 @@ func sendTests(numNodes uint, outgoing chan message, l logger) {
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		msg := message{
+			int(i),
 			int(numNodes),
 			int(i),
 			clientReadRequest,

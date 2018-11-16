@@ -10,6 +10,7 @@ func startNode(id int, incoming chan message, outgoing chan message) {
 			switch msg.demuxKey {
 			case clientReadRequest:
 				outgoing <- message{
+					msg.id,
 					id,
 					msg.src,
 					clientReadResponse,
@@ -19,6 +20,7 @@ func startNode(id int, incoming chan message, outgoing chan message) {
 				}
 			case clientWriteRequest:
 				outgoing <- message{
+					msg.id,
 					id,
 					msg.src,
 					clientWriteResponse,
