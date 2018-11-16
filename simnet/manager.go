@@ -8,7 +8,7 @@ type link struct {
 }
 
 func Simulate(numNodes uint) {
-	links := make([]link, numNodes)
+	links := make([]link, numNodes+1)
 
 	var i uint
 	for i = 0; i < numNodes; i++ {
@@ -17,12 +17,20 @@ func Simulate(numNodes uint) {
 			make(chan message, 25),
 		}
 
-		go startNode(links[i].incoming, links[i].outgoing)
-
+		go startNode(int(i), links[i].incoming, links[i].outgoing)
 		go startHelper(links[i].outgoing, links)
-
-		// TODO: Execute some tests on the main routine
 	}
+
+	// Address numNodes is the "client" address, used by the manager
+	links[numNodes] = link{
+		make(chan message, 25),
+		make(chan message, 25),
+	}
+
+	go sendTests(numNodes, links[numNodes].outgoing)
+	go startHelper(links[numNodes].outgoing, links)
+
+	recordClientResponses(numNodes, links[numNodes].incoming)
 }
 
 func startHelper(outgoing chan message, links []link) {
@@ -33,5 +41,29 @@ func startHelper(outgoing chan message, links []link) {
 		} else {
 			log.Printf("Misaddressed message from %d to %d", msg.src, msg.dest)
 		}
+	}
+}
+
+func sendTests(numNodes uint, outgoing chan message) {
+	var i uint
+	for i = 0; i < numNodes; i++ {
+		msg := message{
+			int(numNodes),
+			int(i),
+			clientRequest,
+			int(i * i),
+		}
+
+		log.Printf("Request sent\t%+v", msg)
+		outgoing <- msg
+	}
+}
+
+func recordClientResponses(numNodes uint, incoming chan message) {
+	// Need to wait for as many responses as client requests sent
+	// For now, this equal to numNodes, but will change later
+	var i uint
+	for i = 0; i < numNodes; i++ {
+		log.Printf("Response received\t%+v", <-incoming)
 	}
 }

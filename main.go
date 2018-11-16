@@ -19,5 +19,9 @@ func main() {
 		log.Fatal("Usage: part-ii-project <number of db nodes>")
 	}
 
+	if n < 1 {
+		log.Fatal("Number of nodes must be a positive integer")
+	}
+
 	simnet.Simulate(uint(n))
 }
