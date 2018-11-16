@@ -1,6 +1,16 @@
 package simnet
 
-import "log"
+import (
+	"fmt"
+	"log"
+	"time"
+)
+
+type logger time.Time
+
+func (l logger) log(msg string) {
+	fmt.Println(time.Since(time.Time(l)).Nanoseconds()/1000, "\t", msg)
+}
 
 type link struct {
 	incoming chan message
@@ -27,24 +37,32 @@ func Simulate(numNodes uint) {
 		make(chan message, 25),
 	}
 
-	go sendTests(numNodes, links[numNodes].outgoing)
+	timer := logger(time.Now())
+
+	go sendTests(numNodes, links[numNodes].outgoing, timer)
 	go startHelper(links[numNodes].outgoing, links)
 
-	recordClientResponses(numNodes, links[numNodes].incoming)
+	recordClientResponses(numNodes, links[numNodes].incoming, timer)
 }
 
 func startHelper(outgoing chan message, links []link) {
 	for msg := range outgoing {
 		if msg.dest < len(links) {
-			// Deliver immediately for now. Add latency later.
-			links[msg.dest].incoming <- msg
+			// 10ms latency for now, to be changed later
+			go sendAfterDelay(msg, links[msg.dest].incoming, 10*time.Millisecond)
 		} else {
 			log.Printf("Misaddressed message from %d to %d", msg.src, msg.dest)
 		}
 	}
 }
 
-func sendTests(numNodes uint, outgoing chan message) {
+func sendAfterDelay(msg message, link chan message, delay time.Duration) {
+	time.Sleep(delay)
+
+	link <- msg
+}
+
+func sendTests(numNodes uint, outgoing chan message, l logger) {
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		msg := message{
@@ -56,16 +74,19 @@ func sendTests(numNodes uint, outgoing chan message) {
 			true,
 		}
 
-		log.Printf("Request sent\t%+v", msg)
+		l.log(fmt.Sprintf("Request\t%+v", msg))
 		outgoing <- msg
+
+		// Send transactions at 10ms intervals (to be changed)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
-func recordClientResponses(numNodes uint, incoming chan message) {
+func recordClientResponses(numNodes uint, incoming chan message, l logger) {
 	// Need to wait for as many responses as client requests sent
 	// For now, this equal to numNodes, but will change later
 	var i uint
 	for i = 0; i < numNodes; i++ {
-		log.Printf("Response received\t%+v", <-incoming)
+		l.log(fmt.Sprintf("Response\t%+v", <-incoming))
 	}
 }
