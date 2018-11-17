@@ -1,27 +1,23 @@
 package main
 
 import (
-	"log"
-	"os"
-	"strconv"
+	"flag"
 
 	"github.com/alexbostock/part-ii-project/simnet"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("Usage: part-ii-project <number of db nodes>")
+	opt := simnet.Options{
+		flag.Uint("n", 5, "positive integer number of database nodes"),
+		flag.Int64("seed", 0, "pseudorandom number generator seed"),
+		flag.Float64("rate", 100, "average rate of transactions/second"),
+		flag.Float64("latencymean", 20, "average network message latency in ms"),
+		flag.Float64("latencyvar", 10, "variance of network message latency"),
+		flag.Uint("t", 10, "number of transactions"),
+		flag.Float64("w", 0.1, "proportion of transactions which are writes"),
 	}
 
-	n, err := strconv.ParseUint(os.Args[1], 10, 32)
+	flag.Parse()
 
-	if err != nil {
-		log.Fatal("Usage: part-ii-project <number of db nodes>")
-	}
-
-	if n < 1 {
-		log.Fatal("Number of nodes must be a positive integer")
-	}
-
-	simnet.Simulate(uint(n))
+	simnet.Simulate(opt)
 }
