@@ -11,7 +11,7 @@ import (
 type logger time.Time
 
 func (l logger) log(msg string) {
-	fmt.Println(time.Since(time.Time(l)).Nanoseconds()/1000, "\t", msg)
+	fmt.Printf("%v\t%v\n", time.Since(time.Time(l)).Nanoseconds()/1000, msg)
 }
 
 type Options struct {
