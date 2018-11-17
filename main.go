@@ -13,7 +13,7 @@ func main() {
 		flag.Float64("rate", 100, "average rate of transactions/second"),
 		flag.Float64("latencymean", 20, "average network message latency in ms"),
 		flag.Float64("latencyvar", 10, "variance of network message latency"),
-		flag.Uint("t", 10, "number of transactions"),
+		flag.Uint("t", 50, "number of transactions"),
 		flag.Float64("w", 0.1, "proportion of transactions which are writes"),
 	}
 

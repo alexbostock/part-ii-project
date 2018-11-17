@@ -20,6 +20,10 @@ totalTimeTaken = 0
 for line in stdin:
     m = pattern.match(line)
 
+    if m == None:
+        print(line[:-1])
+        continue
+
     timestamp = int(m.group('timestamp'))
     id = m.group('id')
     msgType = int(m.group('demuxKey'))
