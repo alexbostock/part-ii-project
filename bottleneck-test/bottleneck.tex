@@ -65,15 +65,15 @@
 
 I have implemented a simple network simulator, as described in my design specification. I used this system to test what throughput of transactions my system can achieve, particularly when each transaction involves concurrent disk I/O by many simulated nodes.
 
-I ran tests based on $90\%$ read transactions and $10\%$ writes. For each read transaction, I had every node in the system concurrently read a file. For each write transaction, I had every node concurrently read a file then write a file. This emulates how quorum assembly works, with many nodes doing the same work for each transaction. Having every node execute every transaction makes this an upper bound. Only a subset of the nodes will be involved in each transaction, depending on quorum sizes. I ran these tests with varying transaction rates and varying numbers of nodes.
+I ran tests based on $90\%$ read transactions and $10\%$ writes. My system should be optimised for mostly read transactions, so assume that $10\%$ is an upper bound on the proportion of transactions which are writes. For each read transaction, I had every node in the system concurrently read a file. For each write transaction, I had every node concurrently read a file then write a file. This emulates how quorum assembly works, with many nodes doing the same work for each transaction. 
 
-I measured the throughput of the system as number of transactions completed divided by total execution time. I also calculated node throughput: the product of throughput and the number of nodes. These tests showed that the number of nodes did not affect node throughput. The node throughput is the rate at which disk operations are completed. Since my machine has 1 disk, all disk operations are sequential. Go can efficiently schedule many concurrent routines waiting for disk operations, so only the total number of disk operations affects the result.
+I measured the throughput of the system: number of transactions completed divided by total execution time. I also calculated node throughput: the product of throughput and the number of nodes. These tests showed that the number of nodes did not affect node throughput. The node throughput is the rate at which disk operations are completed. Since my machine has 1 disk, all disk operations are sequential. Go can efficiently schedule many concurrent routines waiting for disk operations, so only the total number of disk operations affects the result.
 
 This test also showed how node throughput increases as rate of transactions increases. At a low rate of transactions (eg. 10 transactions per second, 1000 nodes), node throughput is very close to transaction rate, so every transaction is being processed in real time. At higher rates of transactions, the node throughput reached a constant limit, around 30000 transactions per second. This is where disk I/O is the bottleneck on throughput.
 
-I then ran further tests to determine the maximum throughput given different size values being read from and written to disk. Since the number of nodes does not affect node throughput, I ran every test with 1000 nodes, and tested several high rates of transactions. By testing multiple different rates and verifying that each provides a similar result, I can be confident that the rate was high enough to reach the disk bottleneck in each case.
+I then ran further tests to determine the maximum throughput with different sized values being read from and written to disk. Since the number of nodes does not affect node throughput, I ran every test with 1000 nodes, and tested several high rates of transactions. By testing multiple different rates and verifying that each provides a similar result, I can be confident that the rate was high enough to reach the disk bottleneck in each case.
 
-I repeated this test using a variant on the system where only write transactions would involve disk access, to simulate performance if all read transactions were served from an in-memory cache. I also repeated the two tests on a remote Digital Ocean server, to test for any performance difference between different machines.
+I repeated this test using a variant of the system where only write transactions would involve disk access, to simulate performance if all read transactions were served from an in-memory cache. I also repeated the two tests on a remote Digital Ocean server, to test for any performance difference between different machines.
 
 \begin{figure}
   \centering
@@ -87,7 +87,7 @@ For this project, I want to evaluate 3 key things:
 
 \begin{itemize}
   \item
-  Verify that the system provides the correct consistency guarantees under all conditions, especially with the strongly consistent variant.
+  Test whether the system provides the correct consistency guarantees under all conditions, especially with the strongly consistent variant.
 
   \item
   Measure maximum throughput of transactions the system can handle.
@@ -97,17 +97,17 @@ For this project, I want to evaluate 3 key things:
 
 \end{itemize}
 
-In order to measure maximum throughput, I need to test the system with a high rate of transactions, high enough that the system reaches a bottleneck which prevents throughput increases to match demand. I need to make sure that the bottleneck it reaches is a limitation of the system design, not of my experimental setup.
+In order to measure maximum throughput, I need to test the system with a high rate of transactions, high enough that the system reaches a bottleneck which prevents throughput from increasing to match demand. I need to make sure that the bottleneck it reaches is a limitation of the system design, not of my experimental setup.
 
 I expect that the throughput limit in my system design depends on network latency. I need to make sure that the system reaches a network I/O bottleneck before it reaches a disk I/O bottleneck due to running on a single machine, with a single disk.
 
-I will assume that each transaction involves reading or writing a $256$ byte file, on each node involved in the transaction. This has to include, as a minimum, a key, a value and a Lamport timestamp. Suppose each value is a tweet (around $140$ bytes). Each timestamp is $8$ bytes (according to my design). So $256$ bytes should be adequate to store one key-value pair and its timestamp. While my design specification says store multiple values in each file, changing this to one key-value pair per file would be a minor change.
+I will assume that each transaction involves reading or writing a $256$ byte file, on each node involved in the transaction. This has to include, as a minimum, a key, a value and a Lamport timestamp. Suppose each value is a tweet (around $140$ bytes). Each timestamp is $8$ bytes (according to my design). So $256$ bytes should be adequate to store one key-value pair and its timestamp. While my design specification says store multiple values in each file, changing this to one value per file would not require significant additional work.
 
 According to my experiment, with $256$ byte values, $15000$ disk operations per second is achievable (assuming $10\%$ of transactions are writes). I want to be able to test the system with $1000$ nodes.
 
 Assume that a read transaction involves a network message, a disk operation, then another network message. Also assume that the network latency and disk latency are constants $t_n$ and $t_d$, respectively, so the time for $1$ transaction should be $2t_n + t_d$.
 
-In the worst case, every node will be accessing the disk at the same time. Using a single machine with a single disk, when every node tries to access the disk simultaneously, $1$ node will have to wait for the other $999$ nodes to access the disk before it can continue. That node will take time $2t_n + 1000t_d$ to complete a transaction. With quorum assembly, a transaction cannot complete until every node involved has responded, so the time taken is the maximum time taken by any node involved.
+In the worst case, every node will be accessing the disk at the same time. Using a single machine with a single disk, when every node tries to access the disk simultaneously, $1$ node will have to wait for the other $999$ nodes to access the disk before it can continue. That node will take time $2t_n + 1000t_d$ to complete a transaction. With quorum assembly, a transaction cannot complete until every node involved has responded, so the time taken is the maximum time taken by any single node.
 
 This means that the absolute error in transaction time in the worst case is $(2t_n + 1000t_d) - (2t_n + t_d) = 999t_d$. The relative error is $\frac{999t_d}{2t_n + t_d}$.
 
@@ -131,8 +131,8 @@ Cost: more work to build, and very reliant on external resources.
 
 \subsection{Store data in memory instead of disk}
 
-In addition to the persistent data store described in my design, I could build an alternative store, which stores data in memory. This should be simple to build. I could still use the persistent store to test correctness of the system, but use the in-memory store for high intensity performance tests.
+In addition to the persistent data store described in my design, I could build an alternative store, which stores data in memory. This should be simple to implement, using a hash table and additional delay to (asynchronously) simulate disk access time. I could still use the persistent store to test correctness of the system, but use the in-memory store for high intensity performance tests.
 
-The key limitation of this approach is how much data can be stored in memory, For example, with $1000$ nodes, each storing $2$ MB, the system would be using $2$ GB of memory. This is not a major problem. My system is mainly concerned with testing consistency properties when the same values are modified repeatedly, rather than storing high volumes of data.
+A limitation of this approach is how much data can be stored in memory, For example, with $1000$ nodes, each storing $2$ MB, the system would be using $2$ GB of memory. This is not a major problem. My system is mainly concerned with testing consistency properties when the same values are modified repeatedly, rather than storing high volumes of data.
 
 \end{document}
