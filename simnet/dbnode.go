@@ -2,8 +2,6 @@ package simnet
 
 import (
 	"log"
-	"os"
-	"strconv"
 )
 
 func startNode(id int, incoming chan message, outgoing chan message) {
@@ -13,14 +11,6 @@ func startNode(id int, incoming chan message, outgoing chan message) {
 		} else {
 			switch msg.demuxKey {
 			case clientReadRequest:
-				//				f, err := os.Open("x" + strconv.Itoa(len(msg.value)) + ".dat")
-				//				if err != nil {
-				//					panic(err)
-				//				}
-				//
-				//				f.Read(msg.value)
-				//				f.Close()
-
 				outgoing <- message{
 					msg.id,
 					id,
@@ -31,24 +21,6 @@ func startNode(id int, incoming chan message, outgoing chan message) {
 					false,
 				}
 			case clientWriteRequest:
-				f, err := os.Open("x" + strconv.Itoa(len(msg.value)) + ".dat")
-				if err != nil {
-					panic(err)
-				}
-
-				f.Read(msg.value)
-				f.Close()
-
-				f, err = os.Create(strconv.Itoa(msg.id) + ".dat")
-				if err != nil {
-					panic(err)
-				}
-
-				f.Write(msg.value)
-				f.Close()
-
-				os.Remove(strconv.Itoa(msg.id) + ".dat")
-
 				outgoing <- message{
 					msg.id,
 					id,

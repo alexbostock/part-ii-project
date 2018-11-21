@@ -39,8 +39,8 @@ func Simulate(o Options) {
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		links[i] = link{
-			make(chan message, 1000),
-			make(chan message, 1000),
+			make(chan message, 25),
+			make(chan message, 25),
 		}
 
 		go startNode(int(i), links[i].incoming, links[i].outgoing)
@@ -49,13 +49,13 @@ func Simulate(o Options) {
 
 	// Address numNodes is the "client" address, used by the manager
 	links[numNodes] = link{
-		make(chan message, 1000),
-		make(chan message, 1000),
+		make(chan message, 25),
+		make(chan message, 25),
 	}
 
 	timer := logger(time.Now())
 
-	go sendTests(numNodes, links[numNodes].outgoing, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, int(*o.RandomSeed))
+	go sendTests(numNodes, links[numNodes].outgoing, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions)
 	go startHelper(links[numNodes].outgoing, links, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 
 	recordClientResponses(numNodes, links[numNodes].incoming, timer, *o.NumTransactions)
@@ -82,10 +82,10 @@ func sendAfterDelay(msg message, link chan message, delay time.Duration) {
 	link <- msg
 }
 
-func sendTests(numNodes uint, outgoing chan message, l logger, numTransactions uint, transactionRate float64, proportionWrites float64, seed int) {
+func sendTests(numNodes uint, outgoing chan message, l logger, numTransactions uint, transactionRate float64, proportionWrites float64) {
 	var i uint
 	for i = 0; i < numTransactions; i++ {
-		//dest := int(rand.Float64() * float64(numNodes))
+		dest := int(rand.Float64() * float64(numNodes))
 
 		var msgType messagetype
 		if rand.Float64() < proportionWrites {
@@ -94,28 +94,25 @@ func sendTests(numNodes uint, outgoing chan message, l logger, numTransactions u
 			msgType = clientReadRequest
 		}
 
-		var j uint
-		for j = 0; j < numNodes; j++ {
-			// TODO: Parameterise key and value sizes
-			key := make([]byte, 1)
-			val := make([]byte, seed)
+		// TODO: Parameterise key and value sizes
+		key := make([]byte, 1)
+		val := make([]byte, 8)
 
-			rand.Read(key)
-			rand.Read(val)
+		rand.Read(key)
+		rand.Read(val)
 
-			msg := message{
-				int(i + j*numTransactions),
-				int(numNodes),
-				int(j),
-				msgType,
-				key,
-				val,
-				true,
-			}
-
-			l.log(fmt.Sprintf("Request\t%+v", msg))
-			outgoing <- msg
+		msg := message{
+			int(i),
+			int(numNodes),
+			dest,
+			msgType,
+			key,
+			val,
+			true,
 		}
+
+		l.log(fmt.Sprintf("Request\t%+v", msg))
+		outgoing <- msg
 
 		time.Sleep(time.Duration(1000*rand.ExpFloat64()/transactionRate) * time.Millisecond)
 	}
@@ -125,7 +122,7 @@ func recordClientResponses(numNodes uint, incoming chan message, l logger, numTr
 	// Need to wait for as many responses as client requests sent
 	// For now, this equal to numNodes, but will change later
 	var i uint
-	for i = 0; i < numTransactions*numNodes; i++ {
+	for i = 0; i < numTransactions; i++ {
 		l.log(fmt.Sprintf("Response\t%+v", <-incoming))
 	}
 }
