@@ -79,6 +79,8 @@ func (store persistentstore) Put(key []byte, val []byte) int {
 
 	validatePage(oldPage)
 
+	written := false
+
 	for i := 0; i < len(oldPage)-1; i++ {
 		if bytes.Equal(oldPage[i], key) {
 			// Write the new key-value pair to newPage
@@ -92,6 +94,8 @@ func (store persistentstore) Put(key []byte, val []byte) int {
 			}
 
 			i++
+
+			written = true
 		} else {
 			// Copy existing key-value pair to newPage
 			record := append(oldPage[i], 0)
@@ -103,6 +107,19 @@ func (store persistentstore) Put(key []byte, val []byte) int {
 			if e != nil {
 				return 0
 			}
+		}
+	}
+
+	// Case of hash collision, where file already exists, but does not
+	// contain the required key.
+	if !written {
+		record := append(key, 0)
+		record = append(record, val...)
+		record = append(record, 0)
+
+		_, e = newPage.Write(record)
+		if e != nil {
+			return 0
 		}
 	}
 
