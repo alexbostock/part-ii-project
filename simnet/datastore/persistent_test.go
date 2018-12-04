@@ -11,10 +11,10 @@ type testpair struct {
 }
 
 func TestPersistentStore(t *testing.T) {
-	store := createStore("teststore")
+	store := CreateStore("teststore")
 	defer store.DeleteStore()
 
-	k := []byte{0, 1, 2, 3}
+	k := []byte{1, 2, 3}
 	v := []byte{4, 5, 6, 7, 8, 9}
 	v2 := []byte{4, 5, 6, 7, 8, 127}
 
@@ -22,7 +22,7 @@ func TestPersistentStore(t *testing.T) {
 		t.Error("Reading key not yet written should return nil.")
 	}
 
-	if store.Commit(5) {
+	if store.Commit(k, 5) {
 		t.Error("Committing non-existent transaction should return false.")
 	}
 
@@ -36,7 +36,7 @@ func TestPersistentStore(t *testing.T) {
 		t.Error("Not yet committed transaction should not be visible to Get.")
 	}
 
-	if !store.Commit(id) {
+	if !store.Commit(k, id) {
 		t.Error("Commit with a valid id should commit and return true.")
 	}
 
@@ -54,7 +54,7 @@ func TestPersistentStore(t *testing.T) {
 		t.Error("Overwritten but not committed key should return the old value.")
 	}
 
-	if !store.Commit(id) {
+	if !store.Commit(k, id) {
 		t.Error("Overwrite transaction commit failed.")
 	}
 
@@ -95,7 +95,7 @@ func TestPersistentStore(t *testing.T) {
 		if id == 0 {
 			t.Error("Put should return a non-zero transaction id.")
 		}
-		if !store.Commit(id) {
+		if !store.Commit(test.key, id) {
 			t.Error("Commit for a valid transaction should return true.")
 		}
 	}
