@@ -126,12 +126,12 @@ Supporting each database node, there will be an additional goroutine responsible
 while true:
     message = outgoingMessages.poll() // Blocking deque
 
-    // Chance of packet loss, based on a given parameter
-    if (uniform random value in range [0,1]) < x:
+    // Simulate failed nodes by dropping all their packets
+    if (destination node has failed):
         continue
 
     // Random latency
-    delay = (normal random value, for given mean and variance)
+    delay = a random value, simulating the latency of tcp given some parameters
     sendAfterDelay(message, delay)
 \end{lstlisting}
 
