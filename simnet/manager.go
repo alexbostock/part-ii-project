@@ -39,18 +39,19 @@ func Simulate(o Options) {
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		links[i] = link{
-			make(chan message, 25),
-			make(chan message, 25),
+			make(chan message, 1000),
+			make(chan message, 1000),
 		}
 
-		go startNode(int(i), links[i].incoming, links[i].outgoing)
+		// Timeout value hardcoded (1s)
+		go startNode(int(numNodes), int(i), links[i].incoming, links[i].outgoing, 100*time.Millisecond)
 		go startHelper(links[i].outgoing, links, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 	}
 
 	// Address numNodes is the "client" address, used by the manager
 	links[numNodes] = link{
-		make(chan message, 25),
-		make(chan message, 25),
+		make(chan message, 1000),
+		make(chan message, 1000),
 	}
 
 	timer := logger(time.Now())
@@ -96,19 +97,22 @@ func sendTests(numNodes uint, outgoing chan message, l logger, numTransactions u
 
 		// TODO: Parameterise key and value sizes
 		key := make([]byte, 1)
-		val := make([]byte, 8)
-
 		rand.Read(key)
-		rand.Read(val)
+
+		var val []byte
+		if msgType == clientWriteRequest {
+			val := make([]byte, 8)
+			rand.Read(val)
+		}
 
 		msg := message{
-			int(i),
-			int(numNodes),
-			dest,
-			msgType,
-			key,
-			val,
-			true,
+			id:       int(i),
+			src:      int(numNodes),
+			dest:     dest,
+			demuxKey: msgType,
+			key:      key,
+			value:    val,
+			ok:       true,
 		}
 
 		l.log(fmt.Sprintf("Request\t%+v", msg))

@@ -1,4 +1,6 @@
+go test github.com/alexbostock/part-ii-project/simnet
 go test github.com/alexbostock/part-ii-project/simnet/datastore
+go test github.com/alexbostock/part-ii-project/simnet/quorumlock
 
 echo
 
