@@ -19,8 +19,14 @@ const (
 	nodeUnlockRequest
 	nodeUnlockAck
 
+	// Instead of nodeCommitRequest/nodeAbortRequest, use nodeUnlockRequest,
+	// with the ok field indicating status
+
 	nodeGetRequest
 	nodeGetResponse
+	nodePutRequest
+	nodePutResponse
+	nodeTimestampRequest
 )
 
 type message struct {
@@ -55,6 +61,12 @@ func (m messagetype) String() string {
 		return "nodeGetRequest"
 	case nodeGetResponse:
 		return "nodeGetResponse"
+	case nodePutRequest:
+		return "nodePutRequest"
+	case nodePutResponse:
+		return "nodePutResponse"
+	case nodeTimestampRequest:
+		return "nodeTimestampRequest"
 	default:
 		return "UNKNOWN_MESSAGE_TYPE"
 	}

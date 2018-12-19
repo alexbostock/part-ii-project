@@ -44,7 +44,7 @@ func Simulate(o Options) {
 		}
 
 		// Timeout value hardcoded (1s)
-		go startNode(int(numNodes), int(i), links[i].incoming, links[i].outgoing, 100*time.Millisecond)
+		go startNode(int(numNodes), int(i), links[i].incoming, links[i].outgoing, 500*time.Millisecond)
 		go startHelper(links[i].outgoing, links, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 	}
 
@@ -64,6 +64,7 @@ func Simulate(o Options) {
 
 func startHelper(outgoing chan message, links []link, mean float64, stddev float64) {
 	for msg := range outgoing {
+		//msg.Print()
 		if msg.dest < len(links) {
 			// Normally distributed delay for now
 			// TODO: better simulation of tcp latency
@@ -98,11 +99,13 @@ func sendTests(numNodes uint, outgoing chan message, l logger, numTransactions u
 		// TODO: Parameterise key and value sizes
 		key := make([]byte, 1)
 		rand.Read(key)
+		removeZeroBytes(key)
 
 		var val []byte
 		if msgType == clientWriteRequest {
-			val := make([]byte, 8)
+			val = make([]byte, 8)
 			rand.Read(val)
+			removeZeroBytes(val)
 		}
 
 		msg := message{
@@ -128,5 +131,13 @@ func recordClientResponses(numNodes uint, incoming chan message, l logger, numTr
 	var i uint
 	for i = 0; i < numTransactions; i++ {
 		l.log(fmt.Sprintf("Response\t%+v", <-incoming))
+	}
+}
+
+func removeZeroBytes(b []byte) {
+	for i := 0; i < len(b); i++ {
+		for b[i] == 0 {
+			rand.Read(b[i : i+1])
+		}
 	}
 }

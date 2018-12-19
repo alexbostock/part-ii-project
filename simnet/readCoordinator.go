@@ -2,20 +2,12 @@ package simnet
 
 import (
 	"bytes"
-	"encoding/binary"
-	"log"
 	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/alexbostock/part-ii-project/simnet/datastore"
 )
-
-type node struct {
-	locked   bool
-	value    []byte
-	unlocked bool
-}
 
 type readquorum struct {
 	quorumNodes       map[int]*node
@@ -26,10 +18,6 @@ type readquorum struct {
 	aborted           bool
 	lastOperationTime time.Time
 	localStore        datastore.Store
-}
-
-func (q readquorum) correctId(id int) bool {
-	return id == q.clientRequest.id
 }
 
 func initReadCoord(clientRequest message, incoming, outgoing chan message, numPeers, quorumSize int, store datastore.Store) *readquorum {
@@ -118,7 +106,7 @@ func (q *readquorum) nodeLocked(id int) {
 	}
 }
 
-func (q *readquorum) nodeReturned(id int, key, value []byte) {
+func (q *readquorum) nodeReturned(id int, key, value []byte, ok bool) {
 	q.fineLock.Lock()
 	defer q.fineLock.Unlock()
 
@@ -132,12 +120,12 @@ func (q *readquorum) nodeReturned(id int, key, value []byte) {
 		return
 	}
 
-	if value == nil {
-		q.abort(true)
+	if q.quorumNodes[id] == nil {
 		return
 	}
 
-	if q.quorumNodes[id] == nil {
+	if !ok || value == nil {
+		q.abort(true)
 		return
 	}
 
@@ -241,17 +229,4 @@ func (q *readquorum) abort(internalCall bool) {
 	}
 
 	q.aborted = true
-}
-
-func decodeTimestampVal(encoded []byte) (timestamp uint64, value []byte) {
-	// First 8 bytes are Lamport timestamp
-
-	if len(encoded) < 8 {
-		log.Fatal("Invalid value stored: value prefix must be a 64 bit Lamport timestamp")
-	}
-
-	timestamp = binary.BigEndian.Uint64(encoded[:8])
-	value = encoded[8:]
-
-	return
 }
