@@ -51,6 +51,7 @@ func startNode(n int, id int, incoming, outgoing chan message, lockTimeout time.
 	go state.handleRequests(lockTimeout)
 
 	for msg := range incoming {
+		msg.Print()
 		if msg.dest != id {
 			log.Print("Misdelivered message for ", msg.dest, " delivered to ", id)
 			continue
@@ -62,6 +63,8 @@ func startNode(n int, id int, incoming, outgoing chan message, lockTimeout time.
 			state.clientReqQueue <- msg
 		case nodeLockRequest:
 			go state.acquireLock(msg, lockTimeout)
+		case nodeLockRequestNoTimeout:
+			go state.acquireLock(msg, 0)
 		case nodeLockResponse:
 			state.coordinatorHandle(msg)
 		case nodeUnlockRequest:
@@ -69,6 +72,7 @@ func startNode(n int, id int, incoming, outgoing chan message, lockTimeout time.
 				if msg.ok {
 					state.store.Commit(state.uncommitedKey, state.uncommitedTxid)
 				} else {
+					// TODO
 					// Rollback actually means nothing to the store
 				}
 
@@ -100,7 +104,7 @@ func startNode(n int, id int, incoming, outgoing chan message, lockTimeout time.
 					demuxKey: nodeGetResponse,
 					key:      msg.key,
 					value:    val,
-					ok:       val == nil,
+					ok:       val != nil,
 				}
 			} else {
 				outgoing <- message{
@@ -205,23 +209,43 @@ func (node *nodestate) coordinatorHandle(msg message) {
 }
 
 func (node *nodestate) handleRequests(lockTimeout time.Duration) {
+	completeTransactionSignalChan := make(chan bool)
+	// TODO: Add retries
+
 	for msg := range node.clientReqQueue {
-		node.lock.Lock(msg.id)
 		fmt.Println(node.id, "handling", msg.id)
+		node.lock.Lock(msg.id, false)
+		fmt.Println(node.id, "locked")
 
 		switch msg.demuxKey {
 		case clientReadRequest:
-			node.quorumCoordinator = initReadCoord(msg, node.incoming, node.outgoing, node.numPeers, node.readQSize, node.store)
+			node.quorumCoordinator = initReadCoord(msg, completeTransactionSignalChan, node.outgoing, node.numPeers, node.readQSize, node.store)
 		case clientWriteRequest:
-			node.quorumCoordinator = initWriteCoord(msg, node.incoming, node.outgoing, node.numPeers, node.writeQSize, node.store)
+			node.quorumCoordinator = initWriteCoord(msg, completeTransactionSignalChan, node.outgoing, node.numPeers, node.writeQSize, node.store)
+		default:
+			log.Fatal("Misdirected message to handleRequests")
 		}
 
-		time.Sleep(lockTimeout)
+		<-completeTransactionSignalChan
+
+		if !node.lock.Unlock(msg.id) {
+			log.Fatal(node.id, "failed to unlock after completing transaction", msg.id)
+		}
+		fmt.Println(node.id, node.lock)
 	}
 }
 
 func (node *nodestate) acquireLock(msg message, timeout time.Duration) {
-	locked := node.lock.Lock(msg.id)
+	// 0 timeout means do not timeout
+
+	if node.id == 1 {
+		fmt.Println(msg.id, node.lock)
+	}
+	locked := node.lock.Lock(msg.id, timeout != 0)
+	if node.id == 1 {
+		fmt.Println(msg.id, locked)
+		fmt.Println(msg.id, node.lock)
+	}
 
 	node.outgoing <- message{
 		id:       msg.id,
@@ -231,7 +255,12 @@ func (node *nodestate) acquireLock(msg message, timeout time.Duration) {
 		ok:       locked,
 	}
 
-	go node.startLockTimer(msg.id, timeout)
+	if locked && timeout != 0 {
+		if node.id == 1 {
+			fmt.Println(msg.id, "timeout set")
+		}
+		node.startLockTimer(msg.id, timeout)
+	}
 }
 
 func (node *nodestate) startLockTimer(id int, timeout time.Duration) {

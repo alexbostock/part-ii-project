@@ -19,13 +19,14 @@ type coordinator interface {
 	nodeReturned(id int, key, value []byte, ok bool)
 	nodeUnlocked(id int)
 	abort(bool)
+	respondError()
 }
 
 func decodeTimestampVal(encoded []byte) (timestamp uint64, value []byte) {
 	// First 11 bytes are Lamport timestamp (in base 64)
 
 	if len(encoded) < 11 {
-		log.Fatal("Invalid value stored: value prefix must be a 64 bit Lamport timestamp")
+		log.Fatalf("Invalid value stored: value prefix must be a 64 bit Lamport timestamp.\n%v", encoded)
 	}
 
 	timestampBytes := make([]byte, 8)

@@ -78,23 +78,29 @@ if numReadRequests != numReadResponses:
 if numWriteRequests != numWriteResponses:
     print('ERROR: Number of write responses does not match number of requests')
 
-print(numReadErrors, 'responses to reads were errors', '(' + str(100*numReadErrors/numReadResponses) + '%)')
+if numReadResponses > 0:
+    print(numReadErrors, 'responses to reads were errors', '(' + str(100*numReadErrors/numReadResponses) + '%)')
 
-print(numWriteErrors, 'responses to writes were errors', '(' + str(100*numWriteErrors/numWriteResponses) + '%)')
+if numWriteResponses > 0:
+    print(numWriteErrors, 'responses to writes were errors', '(' + str(100*numWriteErrors/numWriteResponses) + '%)')
 
 readTransactionTimes = readTransactionTimes.values()
 writeTransactionTimes = writeTransactionTimes.values()
 
-meanReadResponseTime = 0
-for time in readTransactionTimes:
-    meanReadResponseTime += time
+if len(readTransactionTimes) > 0:
+    meanReadResponseTime = 0
+    for time in readTransactionTimes:
+        meanReadResponseTime += time
 
-meanWriteResponseTime = 0
-for time in writeTransactionTimes:
-    meanWriteResponseTime += time
+    meanReadResponseTime /= len(readTransactionTimes)
 
-meanReadResponseTime /= len(readTransactionTimes)
-meanWriteResponseTime /= len(writeTransactionTimes)
+    print('Mean read response time (microseconds):', meanReadResponseTime)
 
-print('Mean read response time (microseconds):', meanReadResponseTime)
-print('Mean write response time (microseconds):', meanWriteResponseTime)
+if len(writeTransactionTimes) > 0:
+    meanWriteResponseTime = 0
+    for time in writeTransactionTimes:
+        meanWriteResponseTime += time
+
+    meanWriteResponseTime /= len(writeTransactionTimes)
+
+    print('Mean write response time (microseconds):', meanWriteResponseTime)

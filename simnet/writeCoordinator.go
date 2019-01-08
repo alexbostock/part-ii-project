@@ -11,24 +11,24 @@ import (
 )
 
 type writequorum struct {
-	quorumNodes   map[int]*node
-	fineLock      *sync.Mutex
-	clientRequest *message
-	outgoing      chan message
-	incoming      chan message
-	aborted       bool
-	localStore    datastore.Store
-	localTxid     int
+	quorumNodes     map[int]*node
+	fineLock        *sync.Mutex
+	clientRequest   *message
+	outgoing        chan message
+	localSignalChan chan bool
+	aborted         bool
+	localStore      datastore.Store
+	localTxid       int
 }
 
-func initWriteCoord(clientRequest message, incoming, outgoing chan message, numPeers, quorumSize int, store datastore.Store) *writequorum {
+func initWriteCoord(clientRequest message, signalChan chan bool, outgoing chan message, numPeers, quorumSize int, store datastore.Store) *writequorum {
 	q := writequorum{
-		quorumNodes:   make(map[int]*node),
-		fineLock:      &sync.Mutex{},
-		clientRequest: &clientRequest,
-		incoming:      incoming,
-		outgoing:      outgoing,
-		localStore:    store,
+		quorumNodes:     make(map[int]*node),
+		fineLock:        &sync.Mutex{},
+		clientRequest:   &clientRequest,
+		localSignalChan: signalChan,
+		outgoing:        outgoing,
+		localStore:      store,
 	}
 
 	quorumSize--
@@ -46,7 +46,7 @@ func initWriteCoord(clientRequest message, incoming, outgoing chan message, numP
 			id:       q.clientRequest.id,
 			src:      q.clientRequest.dest,
 			dest:     n,
-			demuxKey: nodeLockRequest,
+			demuxKey: nodeLockRequestNoTimeout,
 			ok:       true,
 		}
 	}
@@ -194,13 +194,7 @@ func (q *writequorum) nodeUnlocked(id int) {
 
 	q.localStore.Commit(q.clientRequest.key, q.localTxid)
 
-	q.incoming <- message{
-		id:       q.clientRequest.id,
-		src:      q.clientRequest.dest,
-		dest:     q.clientRequest.dest,
-		demuxKey: nodeUnlockRequest,
-		ok:       true,
-	}
+	q.localSignalChan <- true
 
 	q.outgoing <- message{
 		id:       q.clientRequest.id,
@@ -244,13 +238,19 @@ func (q *writequorum) abort(internalCall bool) {
 		ok:       false,
 	}
 
-	q.incoming <- message{
-		id:       q.clientRequest.id,
-		src:      q.clientRequest.dest,
-		dest:     q.clientRequest.dest,
-		demuxKey: nodeUnlockRequest,
-		ok:       false,
-	}
+	q.localSignalChan <- false
 
 	q.aborted = true
+}
+
+func (q *writequorum) respondError() {
+	q.outgoing <- message{
+		id:       q.clientRequest.id,
+		src:      q.clientRequest.dest,
+		dest:     q.clientRequest.src,
+		demuxKey: clientWriteResponse,
+		key:      q.clientRequest.key,
+		value:    q.clientRequest.value,
+		ok:       false,
+	}
 }

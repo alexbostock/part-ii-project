@@ -64,7 +64,6 @@ func Simulate(o Options) {
 
 func startHelper(outgoing chan message, links []link, mean float64, stddev float64) {
 	for msg := range outgoing {
-		//msg.Print()
 		if msg.dest < len(links) {
 			// Normally distributed delay for now
 			// TODO: better simulation of tcp latency

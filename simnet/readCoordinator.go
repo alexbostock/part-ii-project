@@ -14,20 +14,20 @@ type readquorum struct {
 	fineLock          *sync.Mutex
 	clientRequest     *message
 	outgoing          chan message
-	incoming          chan message
+	localSignalChan   chan bool
 	aborted           bool
 	lastOperationTime time.Time
 	localStore        datastore.Store
 }
 
-func initReadCoord(clientRequest message, incoming, outgoing chan message, numPeers, quorumSize int, store datastore.Store) *readquorum {
+func initReadCoord(clientRequest message, signalChan chan bool, outgoing chan message, numPeers, quorumSize int, store datastore.Store) *readquorum {
 	q := readquorum{
-		quorumNodes:   make(map[int]*node),
-		fineLock:      &sync.Mutex{},
-		clientRequest: &clientRequest,
-		incoming:      incoming,
-		outgoing:      outgoing,
-		localStore:    store,
+		quorumNodes:     make(map[int]*node),
+		fineLock:        &sync.Mutex{},
+		clientRequest:   &clientRequest,
+		localSignalChan: signalChan,
+		outgoing:        outgoing,
+		localStore:      store,
 	}
 
 	// The coordinator is one member of the quorum
@@ -84,6 +84,10 @@ func (q *readquorum) nodeLocked(id int) {
 	defer q.fineLock.Unlock()
 
 	q.lastOperationTime = time.Now()
+
+	if q.aborted {
+		return
+	}
 
 	q.quorumNodes[id].locked = true
 
@@ -169,14 +173,8 @@ func (q *readquorum) nodeReturned(id int, key, value []byte, ok bool) {
 		ok:       true,
 	}
 
-	// Send unlock request to self
-	q.incoming <- message{
-		id:       q.clientRequest.id,
-		src:      q.clientRequest.dest,
-		dest:     q.clientRequest.dest,
-		demuxKey: nodeUnlockRequest,
-		ok:       true,
-	}
+	// Unlock self
+	q.localSignalChan <- true
 }
 
 func (q *readquorum) nodeUnlocked(id int) {
@@ -209,7 +207,6 @@ func (q *readquorum) abort(internalCall bool) {
 		}
 	}
 
-	// Send error response to the client
 	q.outgoing <- message{
 		id:       q.clientRequest.id,
 		src:      q.clientRequest.dest,
@@ -219,14 +216,22 @@ func (q *readquorum) abort(internalCall bool) {
 		ok:       false,
 	}
 
-	// Send unlock request to self
-	q.incoming <- message{
-		id:       q.clientRequest.id,
-		src:      q.clientRequest.dest,
-		dest:     q.clientRequest.dest,
-		demuxKey: nodeUnlockRequest,
-		ok:       false,
-	}
+	// Unlock self
+	q.localSignalChan <- false
 
 	q.aborted = true
+}
+
+func (q *readquorum) respondError() {
+	q.fineLock.Lock()
+	defer q.fineLock.Unlock()
+
+	q.outgoing <- message{
+		id:       q.clientRequest.id,
+		src:      q.clientRequest.dest,
+		dest:     q.clientRequest.src,
+		demuxKey: clientReadResponse,
+		key:      q.clientRequest.key,
+		ok:       false,
+	}
 }

@@ -15,6 +15,7 @@ const (
 	clientWriteResponse
 
 	nodeLockRequest
+	nodeLockRequestNoTimeout
 	nodeLockResponse
 	nodeUnlockRequest
 	nodeUnlockAck
@@ -51,6 +52,8 @@ func (m messagetype) String() string {
 		return "clientWriteResponse"
 	case nodeLockRequest:
 		return "nodeLockRequest"
+	case nodeLockRequestNoTimeout:
+		return "nodeLockRequestNoTimeout"
 	case nodeLockResponse:
 		return "nodeLockResponse"
 	case nodeUnlockRequest:

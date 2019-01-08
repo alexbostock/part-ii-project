@@ -2,6 +2,7 @@ package quorumlock
 
 import (
 	"log"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type request struct {
 	requestType     reqtype
 	responseChannel chan bool
 	reqid           uint64
+	timeout         bool
 }
 
 type Lock struct {
@@ -28,17 +30,17 @@ type Lock struct {
 
 	reqid             uint64
 	lastTimedOutReqid uint64
-	timeoutSigChan    chan uint64
+	lastTimedOutLock  *sync.Mutex
 }
 
 func New(timeout time.Duration) *Lock {
 	l := &Lock{
-		requests:       make(chan request, 100),
-		queuedRequests: make(chan request, 100),
-		currentHolder:  -1,
-		timeoutLength:  timeout,
-		reqid:          1,
-		timeoutSigChan: make(chan uint64, 100),
+		requests:         make(chan request, 100),
+		queuedRequests:   make(chan request, 100),
+		currentHolder:    -1,
+		timeoutLength:    timeout,
+		reqid:            1,
+		lastTimedOutLock: &sync.Mutex{},
 	}
 
 	go l.handleRequests()
@@ -47,35 +49,37 @@ func New(timeout time.Duration) *Lock {
 }
 
 func (l *Lock) handleRequests() {
-	for {
-		select {
-		case req := <-l.requests:
-			switch req.requestType {
-			case unlockReq:
-				if req.txid == l.currentHolder {
-					l.currentHolder = -1
-					l.giveLockToQueuedReq()
-				}
+	for req := range l.requests {
+		switch req.requestType {
+		case unlockReq:
+			l.lastTimedOutLock.Lock()
+			if req.txid == l.currentHolder {
+				l.currentHolder = -1
+				l.giveLockToQueuedReq()
 				req.responseChannel <- true
-			case lockReq:
-				if l.currentHolder == -1 {
-					l.currentHolder = req.txid
-					req.responseChannel <- true
-				} else {
+			} else {
+				req.responseChannel <- false
+			}
+			l.lastTimedOutLock.Unlock()
+		case lockReq:
+			l.lastTimedOutLock.Lock()
+			if l.currentHolder == -1 {
+				l.currentHolder = req.txid
+				req.responseChannel <- true
+			} else {
+				if req.timeout {
 					req.reqid = l.reqid
 					l.reqid++
-
-					l.queuedRequests <- req
-
 					go l.startTimer(req)
+				} else {
+					req.reqid = 0
 				}
-			case lookup:
-				req.responseChannel <- l.currentHolder == req.txid
+
+				l.queuedRequests <- req
 			}
-		case timedOut := <-l.timeoutSigChan:
-			l.lastTimedOutReqid = timedOut
-		default:
-			time.Sleep(l.timeoutLength / 100)
+			l.lastTimedOutLock.Unlock()
+		case lookup:
+			req.responseChannel <- l.currentHolder == req.txid
 		}
 	}
 }
@@ -87,7 +91,7 @@ func (l *Lock) giveLockToQueuedReq() {
 
 	select {
 	case req := <-l.queuedRequests:
-		if req.reqid > l.lastTimedOutReqid {
+		if req.reqid == 0 || req.reqid > l.lastTimedOutReqid {
 			l.currentHolder = req.txid
 			req.responseChannel <- true
 		} else {
@@ -102,24 +106,29 @@ func (l *Lock) giveLockToQueuedReq() {
 func (l *Lock) startTimer(req request) {
 	time.Sleep(l.timeoutLength / 2)
 
-	req.responseChannel <- false
+	l.lastTimedOutLock.Lock()
+	defer l.lastTimedOutLock.Unlock()
 
-	l.timeoutSigChan <- req.reqid
+	if req.reqid > l.lastTimedOutReqid {
+		l.lastTimedOutReqid = req.reqid
+	}
+	req.responseChannel <- false
 }
 
-func (l *Lock) Lock(id int) bool {
+func (l *Lock) Lock(id int, timesOut bool) bool {
 	resChan := make(chan bool, 1)
 
 	l.requests <- request{
 		txid:            id,
 		requestType:     lockReq,
 		responseChannel: resChan,
+		timeout:         timesOut,
 	}
 
 	return <-resChan
 }
 
-func (l *Lock) Unlock(id int) {
+func (l *Lock) Unlock(id int) bool {
 	resChan := make(chan bool, 1)
 
 	l.requests <- request{
@@ -127,6 +136,8 @@ func (l *Lock) Unlock(id int) {
 		requestType:     unlockReq,
 		responseChannel: resChan,
 	}
+
+	return <-resChan
 }
 
 func (l *Lock) HeldBy(id int) bool {
