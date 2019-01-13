@@ -17,6 +17,6 @@ func New(path string) Store {
 		return nil
 	} else {
 		os.Mkdir(path, 0755)
-		return persistentstore{path, 0}
+		return &persistentstore{path, 0}
 	}
 }

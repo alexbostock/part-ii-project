@@ -30,7 +30,7 @@ func validatePage(page [][]byte) {
 	}
 }
 
-func (store persistentstore) Get(key []byte) []byte {
+func (store *persistentstore) Get(key []byte) []byte {
 	sum := md5.Sum(key)
 	hash := hex.EncodeToString(sum[:])
 
@@ -53,7 +53,7 @@ func (store persistentstore) Get(key []byte) []byte {
 	return nil
 }
 
-func (store persistentstore) Put(key []byte, val []byte) int {
+func (store *persistentstore) Put(key []byte, val []byte) int {
 	store.txid++
 	if store.txid == 0 {
 		store.txid++
@@ -127,7 +127,7 @@ func (store persistentstore) Put(key []byte, val []byte) int {
 }
 
 // Used internally in the case Put is writing a new key, rather than overwriting
-func (store persistentstore) putNew(key []byte, val []byte) int {
+func (store *persistentstore) putNew(key []byte, val []byte) int {
 	newPage, e := os.Create(filepath.Join(store.path, "tx"+strconv.Itoa(store.txid)))
 	if e != nil {
 		return 0
@@ -147,7 +147,7 @@ func (store persistentstore) putNew(key []byte, val []byte) int {
 	}
 }
 
-func (store persistentstore) Commit(key []byte, id int) bool {
+func (store *persistentstore) Commit(key []byte, id int) bool {
 	oldPath := filepath.Join(store.path, "tx"+strconv.Itoa(id))
 
 	sum := md5.Sum(key)
@@ -158,6 +158,6 @@ func (store persistentstore) Commit(key []byte, id int) bool {
 	return e == nil
 }
 
-func (store persistentstore) DeleteStore() {
+func (store *persistentstore) DeleteStore() {
 	os.RemoveAll(store.path)
 }
