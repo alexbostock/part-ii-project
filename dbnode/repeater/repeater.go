@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alexbostock/part-ii-project/simnet/packet"
+	"github.com/alexbostock/part-ii-project/packet"
 )
 
 // A system to repeatedly send requests until they are acknowledged

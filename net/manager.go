@@ -1,4 +1,4 @@
-package simnet
+package net
 
 import (
 	"fmt"
@@ -7,7 +7,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/alexbostock/part-ii-project/simnet/packet"
+	"github.com/alexbostock/part-ii-project/dbnode"
+	"github.com/alexbostock/part-ii-project/packet"
 )
 
 type logger time.Time
@@ -31,17 +32,17 @@ func Simulate(o Options) {
 
 	rand.Seed(*o.RandomSeed)
 
-	nodes := make([]*dbnode, numNodes+1)
+	nodes := make([]*dbnode.Dbnode, numNodes+1)
 
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		// Timeout value hardcoded (500ms)
-		nodes[i] = NewNode(int(numNodes), int(i), 500*time.Millisecond)
+		nodes[i] = dbnode.New(int(numNodes), int(i), 500*time.Millisecond)
 		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 	}
 
 	// Address numNodes is the "client" address, used by the manager
-	nodes[numNodes] = &dbnode{
+	nodes[numNodes] = &dbnode.Dbnode{
 		Incoming: make(chan packet.Message, 1000),
 		Outgoing: make(chan packet.Message, 1000),
 	}
@@ -54,13 +55,13 @@ func Simulate(o Options) {
 	recordClientResponses(numNodes, nodes[numNodes].Incoming, timer, *o.NumTransactions)
 
 	for _, node := range nodes {
-		if node.store != nil {
-			node.store.DeleteStore()
+		if node.Store != nil {
+			node.Store.DeleteStore()
 		}
 	}
 }
 
-func startHelper(outgoing chan packet.Message, links []*dbnode, mean float64, stddev float64) {
+func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean float64, stddev float64) {
 	for msg := range outgoing {
 		if msg.Dest < len(links) {
 			// Normally distributed delay for now

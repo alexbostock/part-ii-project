@@ -1,4 +1,4 @@
-package simnet
+package dbnode
 
 import (
 	"encoding/base64"

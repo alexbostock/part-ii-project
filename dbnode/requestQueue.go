@@ -1,7 +1,7 @@
-package simnet
+package dbnode
 
 import (
-	"github.com/alexbostock/part-ii-project/simnet/packet"
+	"github.com/alexbostock/part-ii-project/packet"
 )
 
 type queue struct {

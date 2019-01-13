@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 
-	"github.com/alexbostock/part-ii-project/simnet"
+	"github.com/alexbostock/part-ii-project/net"
 )
 
 func main() {
-	opt := simnet.Options{
+	opt := net.Options{
 		flag.Uint("n", 5, "positive integer number of database nodes"),
 		flag.Int64("seed", 0, "pseudorandom number generator seed"),
 		flag.Float64("rate", 100, "average rate of transactions/second"),
@@ -19,5 +19,5 @@ func main() {
 
 	flag.Parse()
 
-	simnet.Simulate(opt)
+	net.Simulate(opt)
 }
