@@ -573,7 +573,11 @@ func (n *Dbnode) continueProcessing() {
 }
 
 func (n *Dbnode) abortProcessing() {
-	// TODO: rollback any uncommitted transaction
+	if n.uncommitedTxid > 0 {
+		n.Store.Rollback(n.uncommitedTxid)
+		n.uncommitedTxid = 0
+		n.uncommitedKey = nil
+	}
 
 	if n.quorumMembers != nil {
 		for node := range n.quorumMembers {

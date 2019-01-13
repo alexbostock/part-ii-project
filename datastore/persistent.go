@@ -161,3 +161,8 @@ func (store *persistentstore) Commit(key []byte, id int) bool {
 func (store *persistentstore) DeleteStore() {
 	os.RemoveAll(store.path)
 }
+
+func (store *persistentstore) Rollback(id int) {
+	path := filepath.Join(store.path, "tx"+strconv.Itoa(id))
+	os.Remove(path)
+}

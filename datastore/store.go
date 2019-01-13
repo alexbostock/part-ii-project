@@ -9,6 +9,7 @@ type Store interface {
 	Put(key, val []byte) int        // Returns a unique non-zero id if write was successful (requires a commit call to complete)
 	Commit(key []byte, id int) bool // Returns true iff the transaction with id id was successfully committed
 	DeleteStore()                   // Delete the store (including removing all data from disk)
+	Rollback(id int)                // Deletes all traces of an uncommitted transaction
 }
 
 func New(path string) Store {

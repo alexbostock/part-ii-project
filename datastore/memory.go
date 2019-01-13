@@ -52,6 +52,10 @@ func (store *memstore) DeleteStore() {
 	// Do nothing
 }
 
+func (store *memstore) Rollback(id int) {
+	delete(store.uncommitted, id)
+}
+
 func (store *memstore) insert(key, value []byte) {
 	if len(key) == 0 {
 		store.value = value
