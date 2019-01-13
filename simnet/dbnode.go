@@ -26,12 +26,13 @@ const (
 	processingWrite
 )
 
-type nodestate struct {
+type dbnode struct {
 	id              int
 	numPeers        int
 	readQuorumSize  int
 	writeQuorumSize int
-	outgoing        chan packet.Message
+	Incoming        chan packet.Message
+	Outgoing        chan packet.Message
 	lockTimeout     time.Duration
 
 	currentMode  mode
@@ -52,13 +53,16 @@ type nodestate struct {
 	uncommitedKey  []byte
 }
 
-func startNode(n int, id int, incoming, outgoing chan packet.Message, lockTimeout time.Duration) {
-	state := &nodestate{
+func NewNode(n int, id int, lockTimeout time.Duration) *dbnode {
+	outgoing := make(chan packet.Message, 1000)
+
+	state := &dbnode{
 		id:              id,
 		numPeers:        n - 1,
 		readQuorumSize:  n/2 + 1,
 		writeQuorumSize: n/2 + 1,
-		outgoing:        outgoing,
+		Incoming:        make(chan packet.Message, 1000),
+		Outgoing:        outgoing,
 		lockTimeout:     lockTimeout,
 		store:           datastore.New(filepath.Join("data", strconv.Itoa(id))),
 		currentTxid:     -1,
@@ -66,18 +70,20 @@ func startNode(n int, id int, incoming, outgoing chan packet.Message, lockTimeou
 		requestRepeater: repeater.New(n, outgoing, lockTimeout, 3),
 	}
 
-	state.handleRequests(incoming)
+	go state.handleRequests()
+
+	return state
 }
 
-func (n *nodestate) handleRequests(incoming chan packet.Message) {
+func (n *dbnode) handleRequests() {
 	timeoutCounter := 0
-	go n.setTimer(incoming, timeoutCounter)
+	go n.setTimer(timeoutCounter)
 
 	timedOutLockRequests := make(chan *packet.Message, 10)
 
 	for {
 		select {
-		case msg := <-incoming:
+		case msg := <-n.Incoming:
 			if msg.Dest != n.id {
 				log.Fatal("Midelivered message", msg)
 			}
@@ -93,7 +99,7 @@ func (n *nodestate) handleRequests(incoming chan packet.Message) {
 						n.abortProcessing()
 					}
 				}
-				go n.setTimer(incoming, timeoutCounter)
+				go n.setTimer(timeoutCounter)
 			} else {
 				timeoutCounter++
 				fmt.Printf("%+v\n", n)
@@ -152,7 +158,7 @@ func (n *nodestate) handleRequests(incoming chan packet.Message) {
 					n.currentMode = processingRead
 					n.currentTxid = msg.Id
 
-					n.outgoing <- packet.Message{
+					n.Outgoing <- packet.Message{
 						Id:       msg.Id,
 						Src:      n.id,
 						Dest:     msg.Src,
@@ -163,7 +169,7 @@ func (n *nodestate) handleRequests(incoming chan packet.Message) {
 					n.currentMode = processingWrite
 					n.currentTxid = msg.Id
 
-					n.outgoing <- packet.Message{
+					n.Outgoing <- packet.Message{
 						Id:       msg.Id,
 						Src:      n.id,
 						Dest:     msg.Src,
@@ -189,7 +195,7 @@ func (n *nodestate) handleRequests(incoming chan packet.Message) {
 					resType = packet.NodeGetResponse
 				}
 
-				n.outgoing <- packet.Message{
+				n.Outgoing <- packet.Message{
 					Id:       msg.Id,
 					Src:      n.id,
 					Dest:     msg.Src,
@@ -203,9 +209,9 @@ func (n *nodestate) handleRequests(incoming chan packet.Message) {
 	}
 }
 
-func (n *nodestate) setTimer(incoming chan packet.Message, counter int) {
+func (n *dbnode) setTimer(counter int) {
 	time.Sleep(n.lockTimeout)
-	incoming <- packet.Message{
+	n.Incoming <- packet.Message{
 		Id:       counter,
 		Src:      n.id,
 		Dest:     n.id,
@@ -213,7 +219,7 @@ func (n *nodestate) setTimer(incoming chan packet.Message, counter int) {
 	}
 }
 
-func (n *nodestate) handleLockRes(msg packet.Message) {
+func (n *dbnode) handleLockRes(msg packet.Message) {
 	n.requestRepeater.Ack(msg)
 
 	if n.currentTxid == msg.Id && (n.currentMode == coordinatingRead || n.currentMode == assemblingQuorum) {
@@ -229,7 +235,7 @@ func (n *nodestate) handleLockRes(msg packet.Message) {
 	}
 }
 
-func (n *nodestate) handleUnlockReq(msg packet.Message) {
+func (n *dbnode) handleUnlockReq(msg packet.Message) {
 	if n.currentTxid == msg.Id && n.uncommitedTxid > 0 && msg.Ok {
 		n.store.Commit(n.uncommitedKey, n.uncommitedTxid)
 		n.uncommitedKey = nil
@@ -239,7 +245,7 @@ func (n *nodestate) handleUnlockReq(msg packet.Message) {
 	n.currentMode = idle
 	n.currentTxid = -1
 
-	n.outgoing <- packet.Message{
+	n.Outgoing <- packet.Message{
 		Id:       msg.Id,
 		Src:      n.id,
 		Dest:     msg.Src,
@@ -248,11 +254,11 @@ func (n *nodestate) handleUnlockReq(msg packet.Message) {
 	}
 }
 
-func (n *nodestate) handleUnlockAck(msg packet.Message) {
+func (n *dbnode) handleUnlockAck(msg packet.Message) {
 	n.requestRepeater.Ack(msg)
 }
 
-func (n *nodestate) handleGetReq(msg packet.Message) {
+func (n *dbnode) handleGetReq(msg packet.Message) {
 	var val []byte
 	var ok bool
 
@@ -260,7 +266,7 @@ func (n *nodestate) handleGetReq(msg packet.Message) {
 		val = n.store.Get(msg.Key)
 		ok = val != nil
 	}
-	n.outgoing <- packet.Message{
+	n.Outgoing <- packet.Message{
 		Id:       msg.Id,
 		Src:      n.id,
 		Dest:     msg.Src,
@@ -271,7 +277,7 @@ func (n *nodestate) handleGetReq(msg packet.Message) {
 	}
 }
 
-func (n *nodestate) handleGetRes(msg packet.Message) {
+func (n *dbnode) handleGetRes(msg packet.Message) {
 	n.requestRepeater.Ack(msg)
 
 	if n.currentTxid == msg.Id && (n.currentMode == coordinatingRead || n.currentMode == coordinatingWrite) {
@@ -287,7 +293,7 @@ func (n *nodestate) handleGetRes(msg packet.Message) {
 	}
 }
 
-func (n *nodestate) handlePutReq(msg packet.Message) {
+func (n *dbnode) handlePutReq(msg packet.Message) {
 	var ok bool
 
 	if n.currentMode == processingWrite && n.currentTxid == msg.Id {
@@ -298,7 +304,7 @@ func (n *nodestate) handlePutReq(msg packet.Message) {
 		}
 	}
 
-	n.outgoing <- packet.Message{
+	n.Outgoing <- packet.Message{
 		Id:       msg.Id,
 		Src:      n.id,
 		Dest:     msg.Src,
@@ -309,7 +315,7 @@ func (n *nodestate) handlePutReq(msg packet.Message) {
 	}
 }
 
-func (n *nodestate) handlePutRes(msg packet.Message) {
+func (n *dbnode) handlePutRes(msg packet.Message) {
 	n.requestRepeater.Ack(msg)
 
 	if n.currentTxid == msg.Id && n.currentMode == coordinatingWrite {
@@ -325,7 +331,7 @@ func (n *nodestate) handlePutRes(msg packet.Message) {
 	}
 }
 
-func (n *nodestate) handleTimestampReq(msg packet.Message) {
+func (n *dbnode) handleTimestampReq(msg packet.Message) {
 	// Must always respond with nodeGetResponse, ok: true
 
 	var val []byte
@@ -343,7 +349,7 @@ func (n *nodestate) handleTimestampReq(msg packet.Message) {
 		base64.StdEncoding.Encode(val, tsBytes)
 	}
 
-	n.outgoing <- packet.Message{
+	n.Outgoing <- packet.Message{
 		Id:       msg.Id,
 		Src:      n.id,
 		Dest:     msg.Src,
@@ -354,7 +360,7 @@ func (n *nodestate) handleTimestampReq(msg packet.Message) {
 	}
 }
 
-func (n *nodestate) continueProcessing() {
+func (n *dbnode) continueProcessing() {
 	switch n.currentMode {
 	case coordinatingRead:
 		if n.quorumMembers == nil {
@@ -416,7 +422,7 @@ func (n *nodestate) continueProcessing() {
 			}
 
 			// Return to client
-			n.outgoing <- packet.Message{
+			n.Outgoing <- packet.Message{
 				Id:       n.clientRequest.Id,
 				Src:      n.id,
 				Dest:     n.clientRequest.Src,
@@ -509,7 +515,7 @@ func (n *nodestate) continueProcessing() {
 		case packet.NodeUnlockRequest:
 			ok := n.store.Commit(n.uncommitedKey, n.uncommitedTxid)
 
-			n.outgoing <- packet.Message{
+			n.Outgoing <- packet.Message{
 				Id:       n.clientRequest.Id,
 				Src:      n.id,
 				Dest:     n.clientRequest.Src,
@@ -551,7 +557,7 @@ func (n *nodestate) continueProcessing() {
 	}
 }
 
-func (n *nodestate) abortProcessing() {
+func (n *dbnode) abortProcessing() {
 	// TODO: rollback any uncommitted transaction
 
 	if n.quorumMembers != nil {
@@ -583,7 +589,7 @@ func (n *nodestate) abortProcessing() {
 			resType = packet.ClientWriteResponse
 		}
 
-		n.outgoing <- packet.Message{
+		n.Outgoing <- packet.Message{
 			Id:       n.clientRequest.Id,
 			Src:      n.id,
 			Dest:     n.clientRequest.Src,
@@ -595,7 +601,7 @@ func (n *nodestate) abortProcessing() {
 	case processingRead:
 		fallthrough
 	case processingWrite:
-		n.outgoing <- packet.Message{
+		n.Outgoing <- packet.Message{
 			Id:       n.clientRequest.Id,
 			Src:      n.id,
 			Dest:     n.clientRequest.Src,
@@ -610,7 +616,7 @@ func (n *nodestate) abortProcessing() {
 	n.numWaitingNodes = 0
 }
 
-func (n *nodestate) assembleQuorum(quorumSize int, requestType packet.Messagetype) {
+func (n *dbnode) assembleQuorum(quorumSize int, requestType packet.Messagetype) {
 	n.quorumMembers = make(map[int]packet.Message)
 
 	peers := rand.Perm(n.numPeers)

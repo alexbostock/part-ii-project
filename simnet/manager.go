@@ -26,45 +26,41 @@ type Options struct {
 	ProportionWriteTransactions *float64
 }
 
-type link struct {
-	incoming chan packet.Message
-	outgoing chan packet.Message
-}
-
 func Simulate(o Options) {
 	numNodes := *o.NumNodes
 
 	rand.Seed(*o.RandomSeed)
 
-	links := make([]link, numNodes+1)
+	nodes := make([]*dbnode, numNodes+1)
 
 	var i uint
 	for i = 0; i < numNodes; i++ {
-		links[i] = link{
-			make(chan packet.Message, 1000),
-			make(chan packet.Message, 1000),
-		}
-
-		// Timeout value hardcoded (1s)
-		go startNode(int(numNodes), int(i), links[i].incoming, links[i].outgoing, 500*time.Millisecond)
-		go startHelper(links[i].outgoing, links, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
+		// Timeout value hardcoded (500ms)
+		nodes[i] = NewNode(int(numNodes), int(i), 500*time.Millisecond)
+		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 	}
 
 	// Address numNodes is the "client" address, used by the manager
-	links[numNodes] = link{
-		make(chan packet.Message, 1000),
-		make(chan packet.Message, 1000),
+	nodes[numNodes] = &dbnode{
+		Incoming: make(chan packet.Message, 1000),
+		Outgoing: make(chan packet.Message, 1000),
 	}
 
 	timer := logger(time.Now())
 
-	go sendTests(numNodes, links[numNodes].outgoing, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions)
-	go startHelper(links[numNodes].outgoing, links, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
+	go sendTests(numNodes, nodes[numNodes].Outgoing, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions)
+	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 
-	recordClientResponses(numNodes, links[numNodes].incoming, timer, *o.NumTransactions)
+	recordClientResponses(numNodes, nodes[numNodes].Incoming, timer, *o.NumTransactions)
+
+	for _, node := range nodes {
+		if node.store != nil {
+			node.store.DeleteStore()
+		}
+	}
 }
 
-func startHelper(outgoing chan packet.Message, links []link, mean float64, stddev float64) {
+func startHelper(outgoing chan packet.Message, links []*dbnode, mean float64, stddev float64) {
 	for msg := range outgoing {
 		if msg.Dest < len(links) {
 			// Normally distributed delay for now
@@ -72,7 +68,7 @@ func startHelper(outgoing chan packet.Message, links []link, mean float64, stdde
 
 			delay := rand.NormFloat64()*stddev + mean
 
-			go sendAfterDelay(msg, links[msg.Dest].incoming, time.Duration(delay)*time.Millisecond)
+			go sendAfterDelay(msg, links[msg.Dest].Incoming, time.Duration(delay)*time.Millisecond)
 		} else {
 			log.Printf("Misaddressed message from %d to %d", msg.Src, msg.Dest)
 		}
@@ -128,7 +124,7 @@ func sendTests(numNodes uint, outgoing chan packet.Message, l logger, numTransac
 
 func recordClientResponses(numNodes uint, incoming chan packet.Message, l logger, numTransactions uint) {
 	// Need to wait for as many responses as client requests sent
-	// For now, this equal to numNodes, but will change later
+	// For now, this is equal to numNodes, but will change later
 	var i uint
 	for i = 0; i < numTransactions; i++ {
 		l.log(fmt.Sprintf("Response\t%+v", <-incoming))
