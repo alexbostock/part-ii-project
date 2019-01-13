@@ -9,7 +9,9 @@ type queue struct {
 }
 
 func (q *queue) enqueue(msg *packet.Message) {
-	q.values = append(q.values, msg)
+	if !q.contains(msg) {
+		q.values = append(q.values, msg)
+	}
 }
 
 func (q *queue) dequeue() *packet.Message {
@@ -32,4 +34,14 @@ func (q *queue) remove(msg *packet.Message) bool {
 
 func (q *queue) empty() bool {
 	return len(q.values) == 0
+}
+
+func (q *queue) contains(msg *packet.Message) bool {
+	for _, m := range q.values {
+		if m == msg {
+			return true
+		}
+	}
+
+	return false
 }

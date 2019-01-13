@@ -3,7 +3,6 @@ package simnet
 import (
 	"encoding/base64"
 	"encoding/binary"
-	"fmt"
 	"log"
 	"math/rand"
 	"path/filepath"
@@ -67,7 +66,8 @@ func NewNode(n int, id int, lockTimeout time.Duration) *dbnode {
 		store:           datastore.New(filepath.Join("data", strconv.Itoa(id))),
 		currentTxid:     -1,
 
-		requestRepeater: repeater.New(n, outgoing, lockTimeout, 3),
+		// TODO: change 1 to a larger value to actually resend messages
+		requestRepeater: repeater.New(n, outgoing, lockTimeout, 1),
 	}
 
 	go state.handleRequests()
@@ -102,8 +102,6 @@ func (n *dbnode) handleRequests() {
 				go n.setTimer(timeoutCounter)
 			} else {
 				timeoutCounter++
-				fmt.Printf("%+v\n", n)
-				msg.Print()
 			}
 
 			switch msg.DemuxKey {
@@ -180,9 +178,6 @@ func (n *dbnode) handleRequests() {
 					log.Fatal("Unexpected message type", msg)
 				}
 			}
-			if msg.DemuxKey != packet.InternalTimerSignal {
-				fmt.Printf("%+v\n\n", n)
-			}
 		case msg := <-timedOutLockRequests:
 			if n.lockRequests.remove(msg) {
 				var resType packet.Messagetype
@@ -192,7 +187,7 @@ func (n *dbnode) handleRequests() {
 				case packet.ClientWriteRequest:
 					resType = packet.ClientWriteResponse
 				default:
-					resType = packet.NodeGetResponse
+					resType = packet.NodeLockResponse
 				}
 
 				n.Outgoing <- packet.Message{
@@ -227,11 +222,23 @@ func (n *dbnode) handleLockRes(msg packet.Message) {
 			n.abortProcessing()
 			return
 		}
-		n.quorumMembers[msg.Src] = msg
-		n.numWaitingNodes--
-		if n.numWaitingNodes == 0 {
-			n.continueProcessing()
+
+		// Make sure we don't count multiple response from the same node
+		if n.quorumMembers[msg.Src].DemuxKey != msg.DemuxKey {
+			n.quorumMembers[msg.Src] = msg
+			n.numWaitingNodes--
+			if n.numWaitingNodes == 0 {
+				n.continueProcessing()
+			}
 		}
+	} else if msg.Ok {
+		n.requestRepeater.Send(packet.Message{
+			Id:       msg.Id,
+			Src:      n.id,
+			Dest:     msg.Src,
+			DemuxKey: packet.NodeUnlockRequest,
+			Ok:       false,
+		})
 	}
 }
 
@@ -242,8 +249,10 @@ func (n *dbnode) handleUnlockReq(msg packet.Message) {
 		n.uncommitedTxid = 0
 	}
 
-	n.currentMode = idle
-	n.currentTxid = -1
+	if n.currentTxid == msg.Id {
+		n.currentMode = idle
+		n.currentTxid = -1
+	}
 
 	n.Outgoing <- packet.Message{
 		Id:       msg.Id,
@@ -285,10 +294,13 @@ func (n *dbnode) handleGetRes(msg packet.Message) {
 			n.abortProcessing()
 			return
 		}
-		n.quorumMembers[msg.Src] = msg
-		n.numWaitingNodes--
-		if n.numWaitingNodes == 0 {
-			n.continueProcessing()
+
+		if n.quorumMembers[msg.Src].DemuxKey != msg.DemuxKey {
+			n.quorumMembers[msg.Src] = msg
+			n.numWaitingNodes--
+			if n.numWaitingNodes == 0 {
+				n.continueProcessing()
+			}
 		}
 	}
 }
@@ -323,10 +335,13 @@ func (n *dbnode) handlePutRes(msg packet.Message) {
 			n.abortProcessing()
 			return
 		}
-		n.quorumMembers[msg.Src] = msg
-		n.numWaitingNodes--
-		if n.numWaitingNodes == 0 {
-			n.continueProcessing()
+
+		if n.quorumMembers[msg.Src].DemuxKey != msg.DemuxKey {
+			n.quorumMembers[msg.Src] = msg
+			n.numWaitingNodes--
+			if n.numWaitingNodes == 0 {
+				n.continueProcessing()
+			}
 		}
 	}
 }
