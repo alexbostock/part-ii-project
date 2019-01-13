@@ -14,7 +14,7 @@ mightBeEventuallyConsistent = True
 
 writtenValues = {}
 
-pattern = re.compile(r"""(?P<timestamp>[0-9]+)\s(?P<type>[a-zA-Z]+)\s\{id:(?P<id>[0-9]+)\ssrc:(?P<src>[0-9]+)\sdest:(?P<dest>[0-9]+)\sdemuxKey:(?P<demuxKey>[0-9]+)\skey:\[(?P<key>[0-9]+(\s[0-9]+)*)\]\svalue:\[(?P<value>([0-9]+(\s[0-9]+)*)?)\]\sok:(?P<ok>[a-z]+)\}""")
+pattern = re.compile(r"""(?P<timestamp>[0-9]+)\s(?P<type>[a-zA-Z]+)\s\{Id:(?P<id>[0-9]+)\sSrc:(?P<src>[0-9]+)\sDest:(?P<dest>[0-9]+)\sDemuxKey:(?P<demuxKey>[a-zA-Z]+)\sKey:\[(?P<key>[0-9]+(\s[0-9]+)*)\]\sValue:\[(?P<value>([0-9]+(\s[0-9]+)*)?)\]\sOk:(?P<ok>[a-z]+)\}""")
 
 for line in stdin:
     m = pattern.match(line)
@@ -23,12 +23,12 @@ for line in stdin:
         print(line[:-1])
         continue
 
-    msgType = int(m.group('demuxKey'))
+    msgType = m.group('demuxKey')
     key = m.group('key').split(' ')
     value = m.group('value').split(' ')
     ok = m.group('ok')
 
-    if msgType == 3 and ok == 'true':
+    if msgType == 'clientReadResponse' and ok == 'true':
         if key in writtenValues:
             values = writtenValues[key]
             if key not in values:
@@ -37,7 +37,7 @@ for line in stdin:
                 stronglyConsistent = False
         else:
             print('ERROR: Non-error value returned for un-written key')
-    elif msgType == 4 and ok == 'true':
+    elif msgType == 'clientWriteResponse' and ok == 'true':
         if key in writtenValues:
             writtenValues[key].append(value)
         else:

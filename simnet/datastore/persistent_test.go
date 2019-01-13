@@ -11,7 +11,7 @@ type testpair struct {
 }
 
 func TestPersistentStore(t *testing.T) {
-	store := CreateStore("teststore")
+	store := New("teststore")
 	defer store.DeleteStore()
 
 	k := []byte{1, 2, 3}

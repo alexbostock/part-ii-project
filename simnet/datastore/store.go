@@ -11,7 +11,7 @@ type Store interface {
 	DeleteStore()                   // Delete the store (including removing all data from disk)
 }
 
-func CreateStore(path string) Store {
+func New(path string) Store {
 	if path == "" {
 		// TODO: return an in-memory store in this case
 		return nil

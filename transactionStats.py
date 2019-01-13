@@ -6,7 +6,7 @@ from sys import stdin
 readTransactionTimes = {}
 writeTransactionTimes = {}
 
-pattern = re.compile(r"""(?P<timestamp>[0-9]+)\s(?P<type>[a-zA-Z]+)\s\{id:(?P<id>[0-9]+)\ssrc:(?P<src>[0-9]+)\sdest:(?P<dest>[0-9]+)\sdemuxKey:(?P<demuxKey>[0-9]+)\skey:\[(?P<key>[0-9]+(\s[0-9]+)*)\]\svalue:\[(?P<value>([0-9]+(\s[0-9]+)*)?)\]\sok:(?P<ok>[a-z]+)\}""")
+pattern = re.compile(r"""(?P<timestamp>[0-9]+)\s(?P<type>[a-zA-Z]+)\s\{Id:(?P<id>[0-9]+)\sSrc:(?P<src>[0-9]+)\sDest:(?P<dest>[0-9]+)\sDemuxKey:(?P<demuxKey>[a-zA-Z]+)\sKey:\[(?P<key>[0-9]+(\s[0-9]+)*)\]\sValue:\[(?P<value>([0-9]+(\s[0-9]+)*)?)\]\sOk:(?P<ok>[a-z]+)\}""")
 
 numReadRequests = 0
 numWriteRequests = 0
@@ -26,24 +26,24 @@ for line in stdin:
 
     timestamp = int(m.group('timestamp'))
     id = m.group('id')
-    msgType = int(m.group('demuxKey'))
+    msgType = m.group('demuxKey')
     ok = m.group('ok')
 
-    if msgType == 1:
+    if msgType == 'clientReadRequest':
         numReadRequests += 1
 
         if id in readTransactionTimes:
             print('Unexpected duplicate request ID', id)
         else:
             readTransactionTimes[id] = timestamp
-    elif msgType == 2:
+    elif msgType == 'clientWriteRequest':
         numWriteRequests += 1
 
         if id in writeTransactionTimes:
             print('Unexpected duplicate request ID', id)
         else:
             writeTransactionTimes[id] = timestamp
-    elif msgType == 3:
+    elif msgType == 'clientReadResponse':
         numReadResponses += 1
 
         if id in readTransactionTimes:
@@ -53,7 +53,7 @@ for line in stdin:
 
         if ok == 'false':
             numReadErrors += 1
-    elif msgType == 4:
+    elif msgType == 'clientWriteResponse':
         numWriteResponses += 1
 
         if id in writeTransactionTimes:
