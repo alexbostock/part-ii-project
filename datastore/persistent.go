@@ -53,7 +53,7 @@ func (store *persistentstore) Get(key []byte) []byte {
 	return nil
 }
 
-func (store *persistentstore) Put(key []byte, val []byte) int {
+func (store *persistentstore) Put(key, val []byte) int {
 	store.txid++
 	if store.txid == 0 {
 		store.txid++
