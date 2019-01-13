@@ -25,8 +25,9 @@ func testStore(store Store, t *testing.T) {
 	v := []byte{4, 5, 6, 7, 8, 9}
 	v2 := []byte{4, 5, 6, 7, 8, 127}
 
-	if store.Get(k) != nil {
-		t.Error("Reading key not yet written should return nil.")
+	val, err := store.Get(k)
+	if val != nil || err != nil {
+		t.Error("Reading key not yet written should return nil, nil.")
 	}
 
 	if store.Commit(k, 5) {
@@ -39,7 +40,8 @@ func testStore(store Store, t *testing.T) {
 		t.Error("Put should return a non-zero transaction id.")
 	}
 
-	if store.Get(k) != nil {
+	val, err = store.Get(k)
+	if val != nil || err != nil {
 		t.Error("Not yet committed transaction should not be visible to Get.")
 	}
 
@@ -47,7 +49,8 @@ func testStore(store Store, t *testing.T) {
 		t.Error("Commit with a valid id should commit and return true.")
 	}
 
-	if store.Get(k) == nil {
+	val, err = store.Get(k)
+	if val == nil || err != nil {
 		t.Error("Value should be visible to Get after Put and Commit.")
 	}
 
@@ -57,7 +60,8 @@ func testStore(store Store, t *testing.T) {
 		t.Error("Put should return a non-zero transaction id (even when overwriting a value.")
 	}
 
-	if !bytes.Equal(store.Get(k), v) {
+	val, _ = store.Get(k)
+	if !bytes.Equal(val, v) {
 		t.Error("Overwritten but not committed key should return the old value.")
 	}
 
@@ -65,7 +69,8 @@ func testStore(store Store, t *testing.T) {
 		t.Error("Overwrite transaction commit failed.")
 	}
 
-	if !bytes.Equal(store.Get(k), v2) {
+	val, _ = store.Get(k)
+	if !bytes.Equal(val, v2) {
 		t.Error("Overwritten value not returned by Get.")
 	}
 
@@ -108,7 +113,8 @@ func testStore(store Store, t *testing.T) {
 	}
 
 	for _, test := range cases {
-		if !bytes.Equal(store.Get(test.key), test.val) {
+		val, _ = store.Get(test.key)
+		if !bytes.Equal(val, test.val) {
 			t.Error("Incorrect value returned.")
 		}
 	}

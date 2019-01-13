@@ -17,14 +17,14 @@ type memstore struct {
 	txid        int
 }
 
-func (store *memstore) Get(key []byte) []byte {
+func (store *memstore) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
-		return store.value
+		return store.value, nil
 	}
 	if store.children[key[0]] != nil {
 		return store.children[key[0]].Get(key[1:])
 	}
-	return nil
+	return nil, nil
 }
 
 func (store *memstore) Put(key, val []byte) int {

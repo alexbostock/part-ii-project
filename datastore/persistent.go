@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"io/ioutil"
 	"log"
 	"os"
@@ -30,13 +31,22 @@ func validatePage(page [][]byte) {
 	}
 }
 
-func (store *persistentstore) Get(key []byte) []byte {
+func (store *persistentstore) Get(key []byte) ([]byte, error) {
 	sum := md5.Sum(key)
 	hash := hex.EncodeToString(sum[:])
+	path := filepath.Join(store.path, hash)
 
-	data, e := ioutil.ReadFile(filepath.Join(store.path, hash))
+	// If there is no file, we do not have a value for the requested key
+	// (this is not an error)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	data, e := ioutil.ReadFile(path)
+
+	// Any other io error is an error
 	if e != nil {
-		return nil
+		return nil, errors.New("Failed to read from disk")
 	}
 
 	values := bytes.Split(data, []byte{0})
@@ -45,12 +55,12 @@ func (store *persistentstore) Get(key []byte) []byte {
 
 	for i := 0; i < len(values)-1; i += 2 {
 		if bytes.Equal(values[i], key) {
-			return values[i+1]
+			return values[i+1], nil
 		}
 	}
 
-	// Error indicates end of file: key not found
-	return nil
+	// EOF reached means key not present (which is not an error)
+	return nil, nil
 }
 
 func (store *persistentstore) Put(key, val []byte) int {

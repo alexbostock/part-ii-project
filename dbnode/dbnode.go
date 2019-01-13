@@ -272,8 +272,9 @@ func (n *Dbnode) handleGetReq(msg packet.Message) {
 	var ok bool
 
 	if n.currentMode == processingRead && n.currentTxid == msg.Id {
-		val = n.Store.Get(msg.Key)
-		ok = val != nil
+		var err error
+		val, err = n.Store.Get(msg.Key)
+		ok = err != nil
 	}
 	n.Outgoing <- packet.Message{
 		Id:       msg.Id,
@@ -350,9 +351,10 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 	// Must always respond with nodeGetResponse, ok: true
 
 	var val []byte
+	var err error
 
 	if n.currentMode == processingWrite && n.currentTxid == msg.Id {
-		val = n.Store.Get(msg.Key)
+		val, err = n.Store.Get(msg.Key)
 	}
 
 	if len(val) == 0 {
@@ -371,7 +373,7 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 		DemuxKey: packet.NodeGetResponse,
 		Key:      msg.Key,
 		Value:    val,
-		Ok:       true,
+		Ok:       err != nil,
 	}
 }
 
@@ -404,7 +406,12 @@ func (n *Dbnode) continueProcessing() {
 			var timestamp uint64
 			var value []byte
 
-			localVal := n.Store.Get(n.clientRequest.Key)
+			localVal, err := n.Store.Get(n.clientRequest.Key)
+			if err != nil {
+				n.abortProcessing()
+			}
+			return
+
 			if len(localVal) > 0 {
 				timestamp, value = decodeTimestampVal(localVal)
 			} else {
@@ -480,7 +487,12 @@ func (n *Dbnode) continueProcessing() {
 		case packet.NodePutRequest:
 			var latestTimestamp uint64
 
-			localVal := n.Store.Get(n.clientRequest.Key)
+			localVal, err := n.Store.Get(n.clientRequest.Key)
+			if err != nil {
+				n.abortProcessing()
+				return
+			}
+
 			if len(localVal) > 0 {
 				return
 				latestTimestamp, _ = decodeTimestampVal(localVal)
