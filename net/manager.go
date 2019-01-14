@@ -26,10 +26,19 @@ type Options struct {
 	NumTransactions             *uint
 	ProportionWriteTransactions *float64
 	PersistentStore             *bool
+	ReadQuorumSize              *uint
+	WriteQuorumSize             *uint
 }
 
 func Simulate(o Options) {
 	numNodes := *o.NumNodes
+
+	rqs := *o.ReadQuorumSize
+	wqs := *o.WriteQuorumSize
+
+	if wqs <= numNodes/2 {
+		log.Fatal("Write quorum size must greater than half the number of nodes")
+	}
 
 	rand.Seed(*o.RandomSeed)
 
@@ -38,7 +47,7 @@ func Simulate(o Options) {
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		// Timeout value hardcoded (500ms)
-		nodes[i] = dbnode.New(int(numNodes), int(i), 500*time.Millisecond, *o.PersistentStore)
+		nodes[i] = dbnode.New(int(numNodes), int(i), 500*time.Millisecond, *o.PersistentStore, rqs, wqs)
 		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 	}
 

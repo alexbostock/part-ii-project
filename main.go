@@ -16,6 +16,8 @@ func main() {
 		flag.Uint("t", 50, "number of transactions"),
 		flag.Float64("w", 0.1, "proportion of transactions which are writes"),
 		flag.Bool("persistent", false, "use persistent data stores on disk rather than in-memory stores"),
+		flag.Uint("rqs", 3, "read quorum size"),
+		flag.Uint("wqs", 3, "write quorum, must satisfy wqs > n/2"),
 	}
 
 	flag.Parse()

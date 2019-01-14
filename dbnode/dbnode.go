@@ -52,7 +52,7 @@ type Dbnode struct {
 	uncommitedKey  []byte
 }
 
-func New(n int, id int, lockTimeout time.Duration, persistentStore bool) *Dbnode {
+func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uint, wqs uint) *Dbnode {
 	outgoing := make(chan packet.Message, 1000)
 
 	var store datastore.Store
@@ -65,8 +65,8 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool) *Dbnode
 	state := &Dbnode{
 		id:              id,
 		numPeers:        n - 1,
-		readQuorumSize:  n/2 + 1,
-		writeQuorumSize: n/2 + 1,
+		readQuorumSize:  int(rqs),
+		writeQuorumSize: int(wqs),
 		Incoming:        make(chan packet.Message, 1000),
 		Outgoing:        outgoing,
 		lockTimeout:     lockTimeout,
