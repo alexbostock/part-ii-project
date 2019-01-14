@@ -25,6 +25,7 @@ type Options struct {
 	MsgLatencyVariance          *float64
 	NumTransactions             *uint
 	ProportionWriteTransactions *float64
+	PersistentStore             *bool
 }
 
 func Simulate(o Options) {
@@ -37,7 +38,7 @@ func Simulate(o Options) {
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		// Timeout value hardcoded (500ms)
-		nodes[i] = dbnode.New(int(numNodes), int(i), 500*time.Millisecond)
+		nodes[i] = dbnode.New(int(numNodes), int(i), 500*time.Millisecond, *o.PersistentStore)
 		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 	}
 

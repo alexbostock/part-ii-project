@@ -52,8 +52,15 @@ type Dbnode struct {
 	uncommitedKey  []byte
 }
 
-func New(n int, id int, lockTimeout time.Duration) *Dbnode {
+func New(n int, id int, lockTimeout time.Duration, persistentStore bool) *Dbnode {
 	outgoing := make(chan packet.Message, 1000)
+
+	var store datastore.Store
+	if persistentStore {
+		store = datastore.New(filepath.Join("data", strconv.Itoa(id)))
+	} else {
+		store = datastore.New("")
+	}
 
 	state := &Dbnode{
 		id:              id,
@@ -63,7 +70,7 @@ func New(n int, id int, lockTimeout time.Duration) *Dbnode {
 		Incoming:        make(chan packet.Message, 1000),
 		Outgoing:        outgoing,
 		lockTimeout:     lockTimeout,
-		Store:           datastore.New(filepath.Join("data", strconv.Itoa(id))),
+		Store:           store,
 		currentTxid:     -1,
 
 		// TODO: change 1 to a larger value to actually resend messages
