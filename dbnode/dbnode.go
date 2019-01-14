@@ -143,19 +143,17 @@ func (n *Dbnode) handleRequests() {
 				msg = *n.lockRequests.dequeue()
 
 				n.currentTxid = msg.Id
+				n.clientRequest = msg
+
 				switch msg.DemuxKey {
 				case packet.ClientReadRequest:
 					n.currentMode = coordinatingRead
-					n.clientRequest = msg
 					n.continueProcessing()
 				case packet.ClientWriteRequest:
 					n.currentMode = assemblingQuorum
-					n.clientRequest = msg
 					n.continueProcessing()
 				case packet.NodeLockRequest:
 					n.currentMode = processingRead
-					n.currentTxid = msg.Id
-
 					n.Outgoing <- packet.Message{
 						Id:       msg.Id,
 						Src:      n.id,
@@ -165,8 +163,6 @@ func (n *Dbnode) handleRequests() {
 					}
 				case packet.NodeLockRequestNoTimeout:
 					n.currentMode = processingWrite
-					n.currentTxid = msg.Id
-
 					n.Outgoing <- packet.Message{
 						Id:       msg.Id,
 						Src:      n.id,
@@ -274,7 +270,7 @@ func (n *Dbnode) handleGetReq(msg packet.Message) {
 	if n.currentMode == processingRead && n.currentTxid == msg.Id {
 		var err error
 		val, err = n.Store.Get(msg.Key)
-		ok = err != nil
+		ok = err == nil
 	}
 	n.Outgoing <- packet.Message{
 		Id:       msg.Id,
@@ -373,7 +369,7 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 		DemuxKey: packet.NodeGetResponse,
 		Key:      msg.Key,
 		Value:    val,
-		Ok:       err != nil,
+		Ok:       err == nil,
 	}
 }
 
@@ -401,6 +397,12 @@ func (n *Dbnode) continueProcessing() {
 					Ok:       true,
 				})
 			}
+
+			n.quorumMembers[n.id] = packet.Message{
+				DemuxKey: packet.NodeUnlockRequest,
+			}
+
+			n.numWaitingNodes = n.readQuorumSize - 1
 		case packet.NodeUnlockRequest:
 			// Read local value
 			var timestamp uint64
@@ -409,13 +411,11 @@ func (n *Dbnode) continueProcessing() {
 			localVal, err := n.Store.Get(n.clientRequest.Key)
 			if err != nil {
 				n.abortProcessing()
+				return
 			}
-			return
 
 			if len(localVal) > 0 {
 				timestamp, value = decodeTimestampVal(localVal)
-			} else {
-				timestamp = 0
 			}
 
 			// Find the most recent value
