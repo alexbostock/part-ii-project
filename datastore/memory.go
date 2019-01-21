@@ -3,7 +3,8 @@ package datastore
 import "bytes"
 
 // An in-memory datastore module
-// Slices cannot be used as map keys, so we use a tree structure
+// Keys can be variable length, so they have to be byte slices.
+// Slices cannot be used as map keys, so we use a trie structure.
 
 type pair struct {
 	key   []byte
