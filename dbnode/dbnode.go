@@ -116,9 +116,7 @@ func (n *Dbnode) handleRequests() {
 				n.lockRequests.enqueue(&msg)
 			case packet.ClientWriteRequest:
 				n.lockRequests.enqueue(&msg)
-			case packet.NodeLockRequest:
-				fallthrough
-			case packet.NodeLockRequestNoTimeout:
+			case packet.NodeLockRequest, packet.NodeLockRequestNoTimeout:
 				n.lockRequests.enqueue(&msg)
 				go func() {
 					time.Sleep(n.lockTimeout)
@@ -615,11 +613,7 @@ func (n *Dbnode) abortProcessing() {
 	}
 
 	switch n.currentMode {
-	case assemblingQuorum:
-		fallthrough
-	case coordinatingRead:
-		fallthrough
-	case coordinatingWrite:
+	case assemblingQuorum, coordinatingRead, coordinatingWrite:
 		var resType packet.Messagetype
 		if n.currentMode == coordinatingRead {
 			resType = packet.ClientReadResponse
@@ -636,9 +630,7 @@ func (n *Dbnode) abortProcessing() {
 			Value:    n.clientRequest.Value,
 			Ok:       false,
 		}
-	case processingRead:
-		fallthrough
-	case processingWrite:
+	case processingRead, processingWrite:
 		n.Outgoing <- packet.Message{
 			Id:       n.clientRequest.Id,
 			Src:      n.id,
