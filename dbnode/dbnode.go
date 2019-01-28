@@ -50,6 +50,10 @@ type Dbnode struct {
 
 	uncommitedTxid int
 	uncommitedKey  []byte
+
+	// IDs from previous unlock transactions to guard against case of
+	// unlock received before corresponding lock.
+	unlockTxids map[int]bool
 }
 
 func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uint, wqs uint) *Dbnode {
@@ -75,6 +79,7 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 
 		// TODO: change 1 to a larger value to actually resend messages
 		requestRepeater: repeater.New(n, outgoing, lockTimeout, 1),
+		unlockTxids:     make(map[int]bool),
 	}
 
 	go state.handleRequests()
@@ -146,6 +151,12 @@ func (n *Dbnode) handleRequests() {
 
 			if n.currentMode == idle && !n.lockRequests.empty() {
 				msg = *n.lockRequests.dequeue()
+
+				// Don't lock for a transaction for which we have
+				// previously received an unlock request.
+				if n.unlockTxids[msg.Id] {
+					continue
+				}
 
 				n.currentTxid = msg.Id
 				n.clientRequest = msg
@@ -253,6 +264,8 @@ func (n *Dbnode) handleUnlockReq(msg packet.Message) {
 	if n.currentTxid == msg.Id {
 		n.currentMode = idle
 		n.currentTxid = -1
+	} else {
+		n.unlockTxids[msg.Id] = true
 	}
 
 	n.Outgoing <- packet.Message{
@@ -352,10 +365,9 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 	// Must always respond with nodeGetResponse, ok: true
 
 	var val []byte
-	var err error
 
 	if n.currentMode == processingWrite && n.currentTxid == msg.Id {
-		val, err = n.Store.Get(msg.Key)
+		val, _ = n.Store.Get(msg.Key)
 	}
 
 	if len(val) == 0 {
@@ -374,7 +386,7 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 		DemuxKey: packet.NodeGetResponse,
 		Key:      msg.Key,
 		Value:    val,
-		Ok:       err == nil,
+		Ok:       true,
 	}
 }
 
@@ -499,7 +511,6 @@ func (n *Dbnode) continueProcessing() {
 			}
 
 			if len(localVal) > 0 {
-				return
 				latestTimestamp, _ = decodeTimestampVal(localVal)
 			}
 
