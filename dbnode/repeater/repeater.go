@@ -36,7 +36,7 @@ func New(numNodes int, outgoing chan packet.Message, timeout time.Duration, numR
 	return &r
 }
 
-func (r *Repeater) Send(msg packet.Message) {
+func (r *Repeater) Send(msg packet.Message, unlimitedRepeats bool) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -64,10 +64,10 @@ func (r *Repeater) Send(msg packet.Message) {
 	}
 	r.unackedReqs[msg.Dest][msg.Id][demuxKey] = true
 
-	go r.send(msg, demuxKey)
+	go r.send(msg, demuxKey, unlimitedRepeats)
 }
 
-func (r *Repeater) send(msg packet.Message, demuxKey packet.Messagetype) {
+func (r *Repeater) send(msg packet.Message, demuxKey packet.Messagetype, unlimited bool) {
 	for i := 0; i < r.numRetries; i++ {
 		r.lock.Lock()
 
@@ -81,6 +81,10 @@ func (r *Repeater) send(msg packet.Message, demuxKey packet.Messagetype) {
 		r.lock.Unlock()
 
 		time.Sleep(r.timeout)
+
+		if unlimited {
+			i--
+		}
 	}
 }
 

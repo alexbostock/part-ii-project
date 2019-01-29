@@ -3,6 +3,7 @@ package dbnode
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"log"
 	"math/rand"
 	"path/filepath"
@@ -77,8 +78,7 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 		Store:           store,
 		currentTxid:     -1,
 
-		// TODO: change 1 to a larger value to actually resend messages
-		requestRepeater: repeater.New(n, outgoing, lockTimeout, 1),
+		requestRepeater: repeater.New(n, outgoing, lockTimeout, 3),
 		unlockTxids:     make(map[int]bool),
 	}
 
@@ -114,6 +114,8 @@ func (n *Dbnode) handleRequests() {
 				go n.setTimer(timeoutCounter)
 			} else {
 				timeoutCounter++
+				fmt.Println(n.id, n.currentMode, n.currentTxid)
+				fmt.Println(msg)
 			}
 
 			switch msg.DemuxKey {
@@ -235,7 +237,7 @@ func (n *Dbnode) handleLockRes(msg packet.Message) {
 			return
 		}
 
-		// Make sure we don't count multiple response from the same node
+		// Make sure we don't count multiple responses from the same node
 		if n.quorumMembers[msg.Src].DemuxKey != msg.DemuxKey {
 			n.quorumMembers[msg.Src] = msg
 			n.numWaitingNodes--
@@ -250,7 +252,7 @@ func (n *Dbnode) handleLockRes(msg packet.Message) {
 			Dest:     msg.Src,
 			DemuxKey: packet.NodeUnlockRequest,
 			Ok:       false,
-		})
+		}, true)
 	}
 }
 
@@ -412,7 +414,7 @@ func (n *Dbnode) continueProcessing() {
 					DemuxKey: packet.NodeGetRequest,
 					Key:      n.clientRequest.Key,
 					Ok:       true,
-				})
+				}, false)
 			}
 
 			n.quorumMembers[n.id] = packet.Message{
@@ -457,7 +459,7 @@ func (n *Dbnode) continueProcessing() {
 					Dest:     id,
 					DemuxKey: packet.NodeUnlockRequest,
 					Ok:       true,
-				})
+				}, true)
 			}
 
 			// Return to client
@@ -494,7 +496,7 @@ func (n *Dbnode) continueProcessing() {
 					DemuxKey: packet.NodeTimestampRequest,
 					Key:      n.clientRequest.Key,
 					Ok:       true,
-				})
+				}, true)
 			}
 
 			n.quorumMembers[n.id] = packet.Message{
@@ -548,7 +550,7 @@ func (n *Dbnode) continueProcessing() {
 					Key:      n.clientRequest.Key,
 					Value:    value,
 					Ok:       true,
-				})
+				}, true)
 			}
 
 			n.quorumMembers[n.id] = packet.Message{
@@ -582,7 +584,7 @@ func (n *Dbnode) continueProcessing() {
 					Dest:     id,
 					DemuxKey: packet.NodeUnlockRequest,
 					Ok:       true,
-				})
+				}, true)
 			}
 
 			n.currentMode = idle
@@ -619,7 +621,7 @@ func (n *Dbnode) abortProcessing() {
 				Dest:     node,
 				DemuxKey: packet.NodeUnlockRequest,
 				Ok:       false,
-			})
+			}, true)
 		}
 	}
 
@@ -672,7 +674,7 @@ func (n *Dbnode) assembleQuorum(quorumSize int, requestType packet.Messagetype) 
 			DemuxKey: requestType,
 			Ok:       true,
 		}
-		n.requestRepeater.Send(n.quorumMembers[node])
+		n.requestRepeater.Send(n.quorumMembers[node], false)
 	}
 
 	// n.quorumMembers[n.id] is a marker of the next step
