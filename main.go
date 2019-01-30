@@ -13,6 +13,7 @@ func main() {
 		flag.Float64("rate", 10, "average rate of transactions/second"),
 		flag.Float64("latencymean", 20, "average network message latency in ms"),
 		flag.Float64("latencyvar", 10, "variance of network message latency"),
+		flag.Float64("nodefailchance", 0.01, "chance of a random node failing per client request"),
 		flag.Uint("t", 50, "number of transactions"),
 		flag.Float64("w", 0.1, "proportion of transactions which are writes"),
 		flag.Bool("persistent", false, "use persistent data stores on disk rather than in-memory stores"),

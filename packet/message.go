@@ -10,7 +10,8 @@ import (
 // A MessageType is an enum indicating the type of a network message. Values
 // prefixed with Client are sent between Clients and Dbnodes. Those prefixed
 // with Nodes are sent between two Dbnodes. Those prefixed with Internal are
-// only to be sent within 1 Dbnode.
+// only to be sent within 1 Dbnode. Those prefixed with Control are meta
+// messages to control the simulation
 type Messagetype uint
 
 const (
@@ -36,6 +37,9 @@ const (
 	NodeTimestampRequest
 
 	InternalTimerSignal
+
+	ControlFail
+	ControlRecover
 )
 
 // A Message represents 1 simulated network message.

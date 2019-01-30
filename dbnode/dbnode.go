@@ -58,6 +58,8 @@ type Dbnode struct {
 	// IDs from previous unlock transactions to guard against case of
 	// unlock received before corresponding lock.
 	unlockTxids map[int]bool
+
+	disabled bool
 }
 
 // New creates a new database node and starts the main loop to handle requests
@@ -114,6 +116,22 @@ func (n *Dbnode) handleRequests() {
 	for {
 		select {
 		case msg := <-n.Incoming:
+			if n.disabled {
+				if msg.DemuxKey == packet.ControlRecover {
+					n.disabled = false
+					timeoutCounter = 0
+					go n.setTimer(timeoutCounter)
+				}
+				continue
+			} else if msg.DemuxKey == packet.ControlRecover {
+				continue
+			}
+
+			if msg.DemuxKey == packet.ControlFail {
+				n.disabled = true
+				continue
+			}
+
 			if msg.Dest != n.id {
 				log.Fatal("Midelivered message", msg)
 			}
@@ -209,6 +227,10 @@ func (n *Dbnode) handleRequests() {
 				}
 			}
 		case msg := <-timedOutLockRequests:
+			if n.disabled {
+				continue
+			}
+
 			if n.lockRequests.remove(msg) {
 				var resType packet.Messagetype
 				switch msg.DemuxKey {
