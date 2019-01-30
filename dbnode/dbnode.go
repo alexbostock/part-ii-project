@@ -3,7 +3,6 @@ package dbnode
 import (
 	"encoding/base64"
 	"encoding/binary"
-	"fmt"
 	"log"
 	"math/rand"
 	"path/filepath"
@@ -114,8 +113,6 @@ func (n *Dbnode) handleRequests() {
 				go n.setTimer(timeoutCounter)
 			} else {
 				timeoutCounter++
-				fmt.Println(n.id, n.currentMode, n.currentTxid)
-				fmt.Println(msg)
 			}
 
 			switch msg.DemuxKey {

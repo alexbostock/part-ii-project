@@ -5,16 +5,23 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/alexbostock/part-ii-project/dbnode"
 	"github.com/alexbostock/part-ii-project/packet"
 )
 
-type logger time.Time
+type logger struct {
+	startTime time.Time
+	lock      sync.Mutex
+}
 
-func (l logger) log(msg string) {
-	fmt.Printf("%v\t%v\n", time.Since(time.Time(l)).Nanoseconds()/1000, msg)
+func (l *logger) log(msg string) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	fmt.Printf("%v\t%v\n", time.Since(l.startTime).Nanoseconds()/1000, msg)
 }
 
 type Options struct {
@@ -44,10 +51,12 @@ func Simulate(o Options) {
 
 	nodes := make([]*dbnode.Dbnode, numNodes+1)
 
+	// TODO: Parameterise timeout length
+	timeout := 500 * time.Millisecond
+
 	var i uint
 	for i = 0; i < numNodes; i++ {
-		// Timeout value hardcoded (500ms)
-		nodes[i] = dbnode.New(int(numNodes), int(i), 500*time.Millisecond, *o.PersistentStore, rqs, wqs)
+		nodes[i] = dbnode.New(int(numNodes), int(i), timeout, *o.PersistentStore, rqs, wqs)
 		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 	}
 
@@ -57,12 +66,11 @@ func Simulate(o Options) {
 		Outgoing: make(chan packet.Message, 1000),
 	}
 
-	timer := logger(time.Now())
+	timer := &logger{startTime: time.Now()}
 
-	go sendTests(numNodes, nodes[numNodes].Outgoing, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions)
 	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance))
 
-	recordClientResponses(numNodes, nodes[numNodes].Incoming, timer, *o.NumTransactions)
+	sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions)
 
 	for _, node := range nodes {
 		if node.Store != nil {
@@ -92,54 +100,40 @@ func sendAfterDelay(msg packet.Message, link chan packet.Message, delay time.Dur
 	link <- msg
 }
 
-func sendTests(numNodes uint, outgoing chan packet.Message, l logger, numTransactions uint, transactionRate float64, proportionWrites float64) {
+func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTransactions uint, transactionRate float64, proportionWrites float64) {
+	client := NewClient(nodes, timeout)
+
 	var i uint
 	for i = 0; i < numTransactions; i++ {
-		dest := int(rand.Float64() * float64(numNodes))
-
-		var msgType packet.Messagetype
-		if rand.Float64() < proportionWrites {
-			msgType = packet.ClientWriteRequest
-		} else {
-			msgType = packet.ClientReadRequest
-		}
-
 		// TODO: Parameterise key and value sizes
 		key := make([]byte, 1)
 		rand.Read(key)
 		removeZeroBytes(key)
 
-		var val []byte
-		if msgType == packet.ClientWriteRequest {
-			val = make([]byte, 8)
+		if rand.Float64() < proportionWrites {
+			val := make([]byte, 8)
 			rand.Read(val)
 			removeZeroBytes(val)
-		}
 
-		msg := packet.Message{
-			Id:       int(i),
-			Src:      int(numNodes),
-			Dest:     dest,
-			DemuxKey: msgType,
-			Key:      key,
-			Value:    val,
-			Ok:       true,
+			go writeRequest(client, l, int(i), key, val)
+		} else {
+			go readRequest(client, l, int(i), key)
 		}
-
-		l.log(fmt.Sprintf("Request\t%+v", msg))
-		outgoing <- msg
 
 		time.Sleep(time.Duration(1000*rand.ExpFloat64()/transactionRate) * time.Millisecond)
 	}
 }
 
-func recordClientResponses(numNodes uint, incoming chan packet.Message, l logger, numTransactions uint) {
-	// Need to wait for as many responses as client requests sent
-	// For now, this is equal to numNodes, but will change later
-	var i uint
-	for i = 0; i < numTransactions; i++ {
-		l.log(fmt.Sprintf("Response\t%+v", <-incoming))
-	}
+func writeRequest(c Client, l *logger, id int, key, val []byte) {
+	l.log(fmt.Sprint("WriteRequest ", id, key, val))
+	ok := c.Put(id, key, val)
+	l.log(fmt.Sprint("WriteResponse ", id, key, val, ok))
+}
+
+func readRequest(c Client, l *logger, id int, key []byte) {
+	l.log(fmt.Sprint("ReadRequest ", id, key))
+	val, ok := c.Get(id, key)
+	l.log(fmt.Sprint("ReadResponse ", id, key, val, ok))
 }
 
 func removeZeroBytes(b []byte) {
