@@ -3,7 +3,6 @@
 package dbnode
 
 import (
-	"encoding/base64"
 	"encoding/binary"
 	"log"
 	"math/rand"
@@ -391,11 +390,8 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 
 	if len(val) == 0 {
 		// Respond with 0 timestamp on failure
-		val = make([]byte, 12)
-		var ts uint64 = 0
-		tsBytes := make([]byte, 8)
-		binary.BigEndian.PutUint64(tsBytes, ts)
-		base64.StdEncoding.Encode(val, tsBytes)
+		val = make([]byte, 8)
+		binary.BigEndian.PutUint64(val, 0)
 	}
 
 	n.Outgoing <- packet.Message{
@@ -544,12 +540,9 @@ func (n *Dbnode) continueProcessing() {
 				}
 			}
 
-			timestampBytes := make([]byte, 8)
-			value := make([]byte, 12)
-			binary.BigEndian.PutUint64(timestampBytes, latestTimestamp+1)
-			base64.StdEncoding.Encode(value, timestampBytes)
-
-			value = append(value, n.clientRequest.Value...)
+			value := make([]byte, 8+len(n.clientRequest.Value))
+			binary.BigEndian.PutUint64(value[:8], latestTimestamp+1)
+			copy(value[8:], n.clientRequest.Value)
 
 			n.uncommitedTxid = n.Store.Put(n.clientRequest.Key, value)
 			n.uncommitedKey = n.clientRequest.Key

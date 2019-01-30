@@ -3,10 +3,10 @@ package datastore
 import (
 	"bytes"
 	"crypto/md5"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,19 +19,7 @@ type persistentstore struct {
 	txid int
 }
 
-func validatePage(page [][]byte) {
-	// A data file should match (key \0 value \0)*
-	// After bytes.Split(data, 0), we should have an odd number of slices, with
-	// the last one being empty.
-
-	if len(page)%2 == 0 {
-		log.Fatal("Corrupt datastore: every key must have a value")
-	}
-
-	if len(page[len(page)-1]) > 0 {
-		log.Fatal("Corrupt datastore: each page must end with nil")
-	}
-}
+// File format is (key_length key val_length val)*
 
 // Get attempts to retreive the value associated with a key. The key must not
 // contain any 0 (null) bytes. Get returns nil and an error on failure. It may
@@ -55,14 +43,18 @@ func (store *persistentstore) Get(key []byte) ([]byte, error) {
 		return nil, errors.New("Failed to read from disk")
 	}
 
-	values := bytes.Split(data, []byte{0})
+	for len(data) > 0 {
+		keyLen := binary.BigEndian.Uint32(data[:4])
+		found := bytes.Equal(data[4:keyLen+4], key)
 
-	validatePage(values)
+		data = data[keyLen+4:]
 
-	for i := 0; i < len(values)-1; i += 2 {
-		if bytes.Equal(values[i], key) {
-			return values[i+1], nil
+		valLen := binary.BigEndian.Uint32(data[:4])
+		if found {
+			return data[4 : valLen+4], nil
 		}
+
+		data = data[valLen+4:]
 	}
 
 	// EOF reached means key not present (which is not an error)
@@ -81,7 +73,7 @@ func (store *persistentstore) Put(key, val []byte) int {
 	sum := md5.Sum(key)
 	hash := hex.EncodeToString(sum[:])
 
-	data, e := ioutil.ReadFile(filepath.Join(store.path, hash))
+	oldPage, e := ioutil.ReadFile(filepath.Join(store.path, hash))
 	if os.IsNotExist(e) {
 		return store.putNew(key, val)
 	} else if e != nil {
@@ -94,47 +86,50 @@ func (store *persistentstore) Put(key, val []byte) int {
 	}
 	defer newPage.Close()
 
-	oldPage := bytes.Split(data, []byte{0})
-
-	validatePage(oldPage)
-
 	written := false
 
-	for i := 0; i < len(oldPage)-1; i++ {
-		if bytes.Equal(oldPage[i], key) {
-			// Write the new key-value pair to newPage
-			record := append(key, 0)
-			record = append(record, val...)
-			record = append(record, 0)
+	for len(oldPage) > 0 {
+		keyLen := binary.BigEndian.Uint32(oldPage[:4])
+		found := bytes.Equal(oldPage[4:keyLen+4], key)
+
+		_, e = newPage.Write(oldPage[:keyLen+4])
+		if e != nil {
+			return 0
+		}
+
+		oldPage = oldPage[keyLen+4:]
+
+		valLen := binary.BigEndian.Uint32(oldPage[:4])
+		if found {
+			// Write new valLen and val
+			record := make([]byte, len(val)+4)
+			binary.BigEndian.PutUint32(record[:4], uint32(len(val)))
+			copy(record[4:], val)
 
 			_, e = newPage.Write(record)
 			if e != nil {
 				return 0
 			}
-
-			i++
 
 			written = true
 		} else {
-			// Copy existing key-value pair to newPage
-			record := append(oldPage[i], 0)
-			i++
-			record = append(record, oldPage[i]...)
-			record = append(record, 0)
-
-			_, e = newPage.Write(record)
-			if e != nil {
-				return 0
-			}
+			// Write current valLen and val
+			_, e = newPage.Write(oldPage[:valLen+4])
 		}
+
+		oldPage = oldPage[valLen+4:]
 	}
 
 	// Case of hash collision, where file already exists, but does not
 	// contain the required key.
 	if !written {
-		record := append(key, 0)
-		record = append(record, val...)
-		record = append(record, 0)
+		record := make([]byte, len(key)+len(val)+8)
+
+		binary.BigEndian.PutUint32(record[:4], uint32(len(key)))
+		copy(record[4:len(key)+4], key)
+
+		binary.BigEndian.PutUint32(record[len(key)+4:len(key)+8], uint32(len(val)))
+		copy(record[len(key)+8:], val)
 
 		_, e = newPage.Write(record)
 		if e != nil {
@@ -153,9 +148,13 @@ func (store *persistentstore) putNew(key []byte, val []byte) int {
 	}
 	defer newPage.Close()
 
-	record := append(key, 0)
-	record = append(record, val...)
-	record = append(record, 0)
+	record := make([]byte, len(key)+len(val)+8)
+
+	binary.BigEndian.PutUint32(record[:4], uint32(len(key)))
+	copy(record[4:len(key)+4], key)
+
+	binary.BigEndian.PutUint32(record[len(key)+4:len(key)+8], uint32(len(val)))
+	copy(record[len(key)+8:], val)
 
 	_, e = newPage.Write(record)
 

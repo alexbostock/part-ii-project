@@ -3,7 +3,6 @@
 package net
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -79,7 +78,6 @@ func (c Client) Put(id int, key, val []byte) bool {
 
 	select {
 	case msg := <-c.nodes[c.numNodes].Incoming:
-		fmt.Println(msg.Ok)
 		return msg.Ok
 	case <-timer.C:
 		return false

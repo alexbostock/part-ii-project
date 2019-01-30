@@ -8,7 +8,8 @@ import (
 )
 
 // A Store is a local key-value store. There are currently two different
-// implementations, which store data on disk or in memory.
+// implementations, which store data on disk or in memory. Keys may not contain
+// any null bytes. Value lengths must be respresentable by a uint32.
 type Store interface {
 	Get(key []byte) ([]byte, error) // Returns a value, or nil to indicate no value
 	Put(key, val []byte) int        // Returns a unique non-zero id if write was successful (requires a commit call to complete)

@@ -126,6 +126,9 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 
 		time.Sleep(time.Duration(1000*rand.ExpFloat64()/transactionRate) * time.Millisecond)
 	}
+
+	// Wait for the last responses before halting)
+	time.Sleep(5 * timeout)
 }
 
 func writeRequest(c Client, l *logger, id int, key, val []byte) {
