@@ -1,3 +1,5 @@
+// Package dbnode implements the behaviour of each node in a distributed
+// database based on quorum assembly.
 package dbnode
 
 import (
@@ -25,6 +27,9 @@ const (
 	processingWrite
 )
 
+// A Dbnode is a single database node. In order to behave like a node, it
+// should be instantiated with New. Public fields are Incoming and Outgoing
+// simulated network links and Store, the underlying local datastore.
 type Dbnode struct {
 	id              int
 	numPeers        int
@@ -56,6 +61,18 @@ type Dbnode struct {
 	unlockTxids map[int]bool
 }
 
+// New creates a new database node and starts the main loop to handle requests
+// from Incoming. The main loop runs in a separate goroutine, so this method
+// without delay.
+//
+// Parameters:
+// n: the number of database nodes in the system.
+// id: the id of this node (0 <= id < n).
+// lockTimeout: the time to wait before aborting a transaction (where applicable).
+// persistentStore: indicates whether the underlying store should use disk or
+// main memory.
+// rqs: the minimum size of a reqad quorum.
+// wqs: the minimum size of a write quorum.
 func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uint, wqs uint) *Dbnode {
 	outgoing := make(chan packet.Message, 1000)
 
@@ -86,6 +103,9 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 	return state
 }
 
+// The main loop. Only this method may access any node state. This goroutine
+// must not block; all blocking operations should be in separate goroutines,
+// which communicate with the main loop by sending messages.
 func (n *Dbnode) handleRequests() {
 	timeoutCounter := 0
 	go n.setTimer(timeoutCounter)

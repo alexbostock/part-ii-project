@@ -3,14 +3,14 @@ package datastore
 import "bytes"
 
 // An in-memory datastore module
-// Keys can be variable length, so they have to be byte slices.
-// Slices cannot be used as map keys, so we use a trie structure.
 
 type pair struct {
 	key   []byte
 	value []byte
 }
 
+// The type memstore is an in-memory datastore, which implements Store. Since
+// keys are variable length byte slices, it uses a trie data structure.
 type memstore struct {
 	value       []byte
 	children    map[byte]*memstore
@@ -18,6 +18,8 @@ type memstore struct {
 	txid        int
 }
 
+// Get retrieves the requested value from the store. It has an err return value
+// to match the Store interface, but err is always nil.
 func (store *memstore) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		return store.value, nil
@@ -28,6 +30,8 @@ func (store *memstore) Get(key []byte) ([]byte, error) {
 	return nil, nil
 }
 
+// Put stores the requested value in the store and returns a unique, non-zero
+// transaction ID. This operation is always successful.
 func (store *memstore) Put(key, val []byte) int {
 	store.txid++
 	if store.txid == 0 {
@@ -39,6 +43,8 @@ func (store *memstore) Put(key, val []byte) int {
 	return store.txid
 }
 
+// Commit commits a transaction given a key and transaction ID. The ID must be
+// the value returned by a previous call to Put.
 func (store *memstore) Commit(key []byte, id int) bool {
 	if !bytes.Equal(store.uncommitted[id].key, key) {
 		return false
@@ -49,10 +55,15 @@ func (store *memstore) Commit(key []byte, id int) bool {
 	return true
 }
 
+// DeleteStore does nothing: an in-memory store can just be left for the
+// garbage collector. This methods exists solely to satisfy the requirements of
+// the Store interface.
 func (store *memstore) DeleteStore() {
 	// Do nothing
 }
 
+// Rollback removes an uncommitted transaction. This requires a transaction ID
+// returned by Put which has not been Committed or Rollbacked.
 func (store *memstore) Rollback(id int) {
 	delete(store.uncommitted, id)
 }

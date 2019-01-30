@@ -1,9 +1,14 @@
+// Package datastore provides local key-value stores which support CRUD
+// operations. There are several different implementations. All writes must be
+// committed before they can be read.
 package datastore
 
 import (
 	"os"
 )
 
+// A Store is a local key-value store. There are currently two different
+// implementations, which store data on disk or in memory.
 type Store interface {
 	Get(key []byte) ([]byte, error) // Returns a value, or nil to indicate no value
 	Put(key, val []byte) int        // Returns a unique non-zero id if write was successful (requires a commit call to complete)
@@ -12,6 +17,9 @@ type Store interface {
 	Rollback(id int)                // Deletes all traces of an uncommitted transaction
 }
 
+// New creates a new Store. Given the empty string, it creates an in-memory
+// store. Given any other string, it attempts to use that string as the path
+// to a data directory.
 func New(path string) Store {
 	if path == "" {
 		return &memstore{nil, make(map[byte]*memstore), make(map[int]pair), 0}

@@ -24,6 +24,8 @@ func (l *logger) log(msg string) {
 	fmt.Printf("%v\t%v\n", time.Since(l.startTime).Nanoseconds()/1000, msg)
 }
 
+// Options represents the parameters with which to run the system. These map
+// directly to the command line options in main.
 type Options struct {
 	NumNodes                    *uint
 	RandomSeed                  *int64
@@ -37,6 +39,8 @@ type Options struct {
 	WriteQuorumSize             *uint
 }
 
+// Simulate starts database nodes, sets up the simulated network, and sends
+// random client requests as tests, based on the given parameters.
 func Simulate(o Options) {
 	numNodes := *o.NumNodes
 

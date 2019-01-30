@@ -12,6 +12,8 @@ import (
 	"strconv"
 )
 
+// A persistentstore is a persistent data store which stores data in binary
+// in a directory. It is essentially a persistent hash map.
 type persistentstore struct {
 	path string
 	txid int
@@ -31,6 +33,10 @@ func validatePage(page [][]byte) {
 	}
 }
 
+// Get attempts to retreive the value associated with a key. The key must not
+// contain any 0 (null) bytes. Get returns nil and an error on failure. It may
+// return nil with a nil error, indicating that the requested value is not
+// present in the store.
 func (store *persistentstore) Get(key []byte) ([]byte, error) {
 	sum := md5.Sum(key)
 	hash := hex.EncodeToString(sum[:])
@@ -63,6 +69,9 @@ func (store *persistentstore) Get(key []byte) ([]byte, error) {
 	return nil, nil
 }
 
+// Put attempts to store (but not commit) a key, value pair in the store. If
+// successful, it returns a unique non-zero transaction ID. In case of error,
+// it returns -1.
 func (store *persistentstore) Put(key, val []byte) int {
 	store.txid++
 	if store.txid == 0 {
@@ -157,6 +166,9 @@ func (store *persistentstore) putNew(key []byte, val []byte) int {
 	}
 }
 
+// Commit commits an uncommitted transaction. It requires a transaction ID from
+// Put which has not yet been committed or rolled back. The given key must
+// match the id (from the call to Put).
 func (store *persistentstore) Commit(key []byte, id int) bool {
 	oldPath := filepath.Join(store.path, "tx"+strconv.Itoa(id))
 
@@ -168,10 +180,14 @@ func (store *persistentstore) Commit(key []byte, id int) bool {
 	return e == nil
 }
 
+// DeleteStore removes all data associated with this store from the file system
+// (deleting the directory this store uses).
 func (store *persistentstore) DeleteStore() {
 	os.RemoveAll(store.path)
 }
 
+// Rollback deletes an uncommitted transaction. It requires a transaction ID
+// returned by Put which has not yet been committed or rolled back.
 func (store *persistentstore) Rollback(id int) {
 	path := filepath.Join(store.path, "tx"+strconv.Itoa(id))
 	os.Remove(path)

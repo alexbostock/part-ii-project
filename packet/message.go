@@ -1,3 +1,5 @@
+// Package packet implements the format of every message in the simulated
+// network.
 package packet
 
 import (
@@ -5,6 +7,10 @@ import (
 	"fmt"
 )
 
+// A MessageType is an enum indicating the type of a network message. Values
+// prefixed with Client are sent between Clients and Dbnodes. Those prefixed
+// with Nodes are sent between two Dbnodes. Those prefixed with Internal are
+// only to be sent within 1 Dbnode.
 type Messagetype uint
 
 const (
@@ -32,6 +38,15 @@ const (
 	InternalTimerSignal
 )
 
+// A Message represents 1 simulated network message.
+// Fields:
+// Id: transaction ID (should unique for every transaction)
+// Src: the source address (ID of a Dbnode or Client)
+// Dest: the destination address (ID of a Dbnode or Client)
+// DemuxKey: the type of message (see MessageType)
+// Key: a database key
+// Value: a database value
+// Ok: false iff an error has occurred
 type Message struct {
 	Id       int
 	Src      int
@@ -42,6 +57,7 @@ type Message struct {
 	Ok       bool
 }
 
+// String converts a MessageType to a string
 func (m Messagetype) String() string {
 	switch m {
 	case ClientReadRequest:
@@ -79,6 +95,7 @@ func (m Messagetype) String() string {
 	}
 }
 
+// Print (non-atomically) prints a Message
 func (m Message) Print() {
 	fmt.Println()
 	fmt.Println("ID", m.Id, m.Src, "->", m.Dest)
@@ -88,6 +105,8 @@ func (m Message) Print() {
 	fmt.Println()
 }
 
+// MessagesEqual returns true iff two messages are identical (comparing keys
+// and values using bytes.Equal)
 func MessagesEqual(m1, m2 Message) (eq bool) {
 	eq = m1.Id == m2.Id &&
 		m1.Src == m2.Src &&
