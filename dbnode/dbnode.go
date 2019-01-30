@@ -440,10 +440,10 @@ func (n *Dbnode) continueProcessing() {
 
 			n.numWaitingNodes = n.readQuorumSize - 1
 		case packet.NodeUnlockRequest:
-			// Read local value
 			var timestamp uint64
 			var value []byte
 
+			// Read local value
 			localVal, err := n.Store.Get(n.clientRequest.Key)
 			if err != nil {
 				n.abortProcessing()

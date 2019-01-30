@@ -13,8 +13,10 @@ type testpair struct {
 func TestPersistentStore(t *testing.T) {
 	store := New("teststore")
 	testStore(store, t)
+}
 
-	store = New("")
+func TestInMemStore(t *testing.T) {
+	store := New("")
 	testStore(store, t)
 }
 

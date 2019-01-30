@@ -1,3 +1,4 @@
+go test github.com/alexbostock/part-ii-project/net
 go test github.com/alexbostock/part-ii-project/datastore
 
 echo

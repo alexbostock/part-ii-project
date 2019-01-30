@@ -3,6 +3,7 @@
 package net
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -27,7 +28,7 @@ func NewClient(nodes []*dbnode.Dbnode, timeout time.Duration) Client {
 	return Client{
 		nodes,
 		len(nodes) - 1,
-		2 * timeout,
+		5 * timeout,
 	}
 }
 
@@ -51,10 +52,10 @@ func (c Client) Get(id int, key []byte) ([]byte, bool) {
 	}
 
 	select {
-	case <-timer.C:
-		return nil, false
 	case msg := <-c.nodes[c.numNodes].Incoming:
 		return msg.Value, msg.Ok
+	case <-timer.C:
+		return nil, false
 	}
 }
 
@@ -77,9 +78,10 @@ func (c Client) Put(id int, key, val []byte) bool {
 	}
 
 	select {
+	case msg := <-c.nodes[c.numNodes].Incoming:
+		fmt.Println(msg.Ok)
+		return msg.Ok
 	case <-timer.C:
 		return false
-	case msg := <-c.nodes[c.numNodes].Incoming:
-		return msg.Ok
 	}
 }
