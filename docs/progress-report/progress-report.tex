@@ -1,0 +1,98 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage{fullpage}
+\usepackage{fancyhdr} %headers
+\usepackage{titlesec}
+\usepackage{graphicx} %images
+\usepackage{amsmath} %maths
+\usepackage{amssymb} %maths symbols
+\usepackage{subfig}
+\usepackage[section]{placeins}
+\usepackage{listings}
+\usepackage[T1]{fontenc}
+\usepackage{lastpage}
+
+\usepackage{enumerate}
+
+\usepackage{braket}
+
+\renewcommand{\headrulewidth}{0pt}
+
+\nonstopmode
+
+\setlength{\headheight}{15pt}
+
+\graphicspath{ {img/} }
+
+%\titleformat{name=\section}
+%  {\normalfont\scshape}{\thesection}{1em}{\large}
+
+\titleformat{name=\section}
+  {\normalfont\large\scshape}{\thesection}{1em}{}
+
+\titleformat{name=\subsection}
+    {\normalfont\normalsize}{\thesubsection}{1em}{\large}
+
+%%\titleformat{\subsubsection}
+%  {\normalfont\normalsize}{\thesubsubsection}{1em}{}
+
+\setlength{\parindent}{0em}
+\addtolength{\parskip}{1ex}
+
+\lstset{
+	basicstyle=\scriptsize,
+	breaklines=true
+}
+
+\pagestyle{fancy}
+\setlength{\headsep}{0.2in}
+\title{Part II Project: Progress Report}
+\author{A Comparison of Consistency Models in Distributed Database Systems}
+
+\date{}
+\fancyhf{}
+\lhead{A.~T.~Bostock}
+\rhead{atb46@cam.ac.uk}
+
+\cfoot{\thepage / \pageref{LastPage}}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\noindent
+{\bf Project Supervisor:} Dr J.~K.~Fawcett
+\vspace{0.2in}
+
+\noindent
+{\bf Director of Studies:} Dr J.~K.~Fawcett
+\vspace{0.2in}
+\noindent
+
+\noindent
+{\bf Project Overseers:} Prof J.~M.~Bacon \& Dr A.~S.~Prorok
+
+\vspace{0.2in}
+
+My project is currently 2 weeks behind schedule. The work I have completed so far has taken longer than I expected, but I am confident that I will complete the project on time.
+
+\subsection*{Work Completed}
+
+\begin{itemize}
+  \item
+  I wrote a design document for what I planned to implement. I completed this 18 days late, on 18th November.
+
+  \item
+  I have built a test framework to simulate a network of distributed database nodes. I completed the basic framework 4 days late, on 18th November.
+
+  \item
+  I have built a strongly consistent database system based on quorum assembly and two-phase commit, and tested that it is strongly consistent, including in the presence of node failures. I planned to have this complete by 12th December. It was actually completed on 30th January.
+
+\end{itemize}
+
+My next tasks to complete are modifying my database system to provide eventual consistency using a sloppy quorum system, and evaluating the performance of both variants of the system. Those, along with the work already completed and the dissertation, are the core deliverables for my project.
+
+I have had difficulties managing time to work on my project alongside other work, which has led to each milestone being reached later than planned. The implementation so far has also taken much longer than I expected, due to the complexity of debugging concurrent systems. The majority of the implementation is now complete, and I don't expect to have any major problems with the remainder of the project.
+
+I included slack time and a Christmas break in my plan so, despite the time spent on implementation, I am only 2 weeks behind. Following my project plan, I have 4 weeks of slack time in the future, so I expect I will be able to complete at least the core deliverables.
+
+\end{document}
