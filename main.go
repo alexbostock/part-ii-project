@@ -19,6 +19,7 @@ func main() {
 		flag.Bool("persistent", false, "use persistent data stores on disk rather than in-memory stores"),
 		flag.Uint("rqs", 3, "read quorum size"),
 		flag.Uint("wqs", 3, "write quorum, must satisfy wqs > n/2"),
+		flag.Uint("numattempts", 1, "maximum number of attempts per transaction from the client"),
 	}
 
 	flag.Parse()

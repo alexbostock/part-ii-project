@@ -38,6 +38,7 @@ type Options struct {
 	PersistentStore             *bool
 	ReadQuorumSize              *uint
 	WriteQuorumSize             *uint
+	NumAttempts                 *uint
 }
 
 // Simulate starts database nodes, sets up the simulated network, and sends
@@ -76,7 +77,7 @@ func Simulate(o Options) {
 
 	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes)
 
-	sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NodeFailureChance, failedNodes)
+	sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NodeFailureChance, failedNodes, *o.NumAttempts)
 
 	for _, node := range nodes {
 		if node.Store != nil {
@@ -110,8 +111,8 @@ func sendAfterDelay(msg packet.Message, link chan packet.Message, delay time.Dur
 	link <- msg
 }
 
-func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTransactions uint, transactionRate, proportionWrites, nodeFailureChance float64, failedNodes failed) {
-	client := NewClient(nodes, timeout)
+func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTransactions uint, transactionRate, proportionWrites, nodeFailureChance float64, failedNodes failed, numAttempts uint) {
+	client := NewClient(nodes, timeout, int(numAttempts))
 
 	var i uint
 	for i = 0; i < numTransactions; i++ {
@@ -146,28 +147,28 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 			rand.Read(val)
 			removeZeroBytes(val)
 
-			go writeRequest(client, l, int(i), key, val)
+			go writeRequest(client, l, key, val)
 		} else {
-			go readRequest(client, l, int(i), key)
+			go readRequest(client, l, key)
 		}
 
 		time.Sleep(time.Duration(1000*rand.ExpFloat64()/transactionRate) * time.Millisecond)
 	}
 
 	// Wait for the last responses before halting)
-	time.Sleep(5 * timeout)
+	time.Sleep(20 * timeout)
 }
 
-func writeRequest(c Client, l *logger, id int, key, val []byte) {
-	l.log(fmt.Sprint("WriteRequest ", id, key, val))
-	ok := c.Put(id, key, val)
-	l.log(fmt.Sprint("WriteResponse ", id, key, val, ok))
+func writeRequest(c *Client, l *logger, key, val []byte) {
+	l.log(fmt.Sprint("WriteRequest ", key, val))
+	ok := c.Put(key, val)
+	l.log(fmt.Sprint("WriteResponse ", key, val, ok))
 }
 
-func readRequest(c Client, l *logger, id int, key []byte) {
-	l.log(fmt.Sprint("ReadRequest ", id, key))
-	val, ok := c.Get(id, key)
-	l.log(fmt.Sprint("ReadResponse ", id, key, val, ok))
+func readRequest(c *Client, l *logger, key []byte) {
+	l.log(fmt.Sprint("ReadRequest ", key))
+	val, ok := c.Get(key)
+	l.log(fmt.Sprint("ReadResponse ", key, val, ok))
 }
 
 func removeZeroBytes(b []byte) {

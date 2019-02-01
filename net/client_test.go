@@ -28,14 +28,12 @@ func TestDatabase(t *testing.T) {
 	}
 	go startHelper(nodes[numNodes].Outgoing, nodes, 0, 0, failedNodes)
 
-	client := NewClient(nodes, timeout)
+	client := NewClient(nodes, timeout, 1)
 
 	k := []byte{1}
 	v := []byte{10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
 
-	id := 0
-
-	val, ok := client.Get(id, k)
+	val, ok := client.Get(k)
 	if len(val) > 0 {
 		t.Error("Reading unwritten key should return no value.")
 	}
@@ -43,16 +41,12 @@ func TestDatabase(t *testing.T) {
 		t.Error("Value not present should not be an error.")
 	}
 
-	id++
-
-	ok = client.Put(id, k, v)
+	ok = client.Put(k, v)
 	if !ok {
 		t.Error("Write transaction failed")
 	}
 
-	id++
-
-	val, ok = client.Get(id, k)
+	val, ok = client.Get(k)
 	if !ok {
 		t.Error("Read transaction failed")
 	}
