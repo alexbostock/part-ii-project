@@ -50,15 +50,17 @@ const (
 // DemuxKey: the type of message (see MessageType)
 // Key: a database key
 // Value: a database value
+// Timestamp: a Lamport clock value for a database value
 // Ok: false iff an error has occurred
 type Message struct {
-	Id       int
-	Src      int
-	Dest     int
-	DemuxKey Messagetype
-	Key      []byte
-	Value    []byte
-	Ok       bool
+	Id        int
+	Src       int
+	Dest      int
+	DemuxKey  Messagetype
+	Key       []byte
+	Value     []byte
+	Timestamp uint64
+	Ok        bool
 }
 
 // String converts a MessageType to a string
@@ -104,7 +106,7 @@ func (m Message) Print() {
 	fmt.Println()
 	fmt.Println("ID", m.Id, m.Src, "->", m.Dest)
 	fmt.Println(m.DemuxKey, m.Ok)
-	fmt.Println(m.Key)
+	fmt.Println(m.Key, m.Timestamp)
 	fmt.Println(m.Value)
 	fmt.Println()
 }

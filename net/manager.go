@@ -161,14 +161,14 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 
 func writeRequest(c *Client, l *logger, key, val []byte) {
 	l.log(fmt.Sprint("WriteRequest ", key, val))
-	ok := c.Put(key, val)
-	l.log(fmt.Sprint("WriteResponse ", key, val, ok))
+	res, timestamp := c.Put(key, val)
+	l.log(fmt.Sprint("WriteResponse ", key, val, timestamp, res))
 }
 
 func readRequest(c *Client, l *logger, key []byte) {
 	l.log(fmt.Sprint("ReadRequest ", key))
-	val, ok := c.Get(key)
-	l.log(fmt.Sprint("ReadResponse ", key, val, ok))
+	val, timestamp, ok := c.Get(key)
+	l.log(fmt.Sprint("ReadResponse ", key, val, timestamp, ok))
 }
 
 func removeZeroBytes(b []byte) {

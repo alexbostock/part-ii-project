@@ -3,7 +3,6 @@
 package dbnode
 
 import (
-	"encoding/binary"
 	"log"
 	"math/rand"
 	"path/filepath"
@@ -323,21 +322,25 @@ func (n *Dbnode) handleUnlockAck(msg packet.Message) {
 
 func (n *Dbnode) handleGetReq(msg packet.Message) {
 	var val []byte
+	var timestamp uint64
 	var ok bool
 
 	if n.currentMode == processingRead && n.currentTxid == msg.Id {
-		var err error
-		val, err = n.Store.Get(msg.Key)
+		val, err := n.Store.Get(msg.Key)
 		ok = err == nil
+		if ok {
+			timestamp, val = decodeTimestampVal(val)
+		}
 	}
 	n.Outgoing <- packet.Message{
-		Id:       msg.Id,
-		Src:      n.id,
-		Dest:     msg.Src,
-		DemuxKey: packet.NodeGetResponse,
-		Key:      msg.Key,
-		Value:    val,
-		Ok:       ok,
+		Id:        msg.Id,
+		Src:       n.id,
+		Dest:      msg.Src,
+		DemuxKey:  packet.NodeGetResponse,
+		Key:       msg.Key,
+		Value:     val,
+		Timestamp: timestamp,
+		Ok:        ok,
 	}
 }
 
@@ -364,7 +367,9 @@ func (n *Dbnode) handlePutReq(msg packet.Message) {
 	var ok bool
 
 	if n.currentMode == processingWrite && n.currentTxid == msg.Id {
-		n.uncommitedTxid = n.Store.Put(msg.Key, msg.Value)
+		val := encodeTimestampVal(msg.Timestamp, msg.Value)
+
+		n.uncommitedTxid = n.Store.Put(msg.Key, val)
 		if n.uncommitedTxid > 0 {
 			n.uncommitedKey = msg.Key
 			ok = true
@@ -372,13 +377,14 @@ func (n *Dbnode) handlePutReq(msg packet.Message) {
 	}
 
 	n.Outgoing <- packet.Message{
-		Id:       msg.Id,
-		Src:      n.id,
-		Dest:     msg.Src,
-		DemuxKey: packet.NodePutResponse,
-		Key:      msg.Key,
-		Value:    msg.Value,
-		Ok:       ok,
+		Id:        msg.Id,
+		Src:       n.id,
+		Dest:      msg.Src,
+		DemuxKey:  packet.NodePutResponse,
+		Key:       msg.Key,
+		Value:     msg.Value,
+		Timestamp: msg.Timestamp,
+		Ok:        ok,
 	}
 }
 
@@ -405,25 +411,22 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 	// Must always respond with nodeGetResponse, ok: true
 
 	var val []byte
+	var timestamp uint64
 
 	if n.currentMode == processingWrite && n.currentTxid == msg.Id {
 		val, _ = n.Store.Get(msg.Key)
-	}
-
-	if len(val) == 0 {
-		// Respond with 0 timestamp on failure
-		val = make([]byte, 8)
-		binary.BigEndian.PutUint64(val, 0)
+		timestamp, _ = decodeTimestampVal(val)
 	}
 
 	n.Outgoing <- packet.Message{
-		Id:       msg.Id,
-		Src:      n.id,
-		Dest:     msg.Src,
-		DemuxKey: packet.NodeGetResponse,
-		Key:      msg.Key,
-		Value:    val,
-		Ok:       true,
+		Id:        msg.Id,
+		Src:       n.id,
+		Dest:      msg.Src,
+		DemuxKey:  packet.NodeGetResponse,
+		Key:       msg.Key,
+		Value:     val,
+		Timestamp: timestamp,
+		Ok:        true,
 	}
 }
 
@@ -468,9 +471,7 @@ func (n *Dbnode) continueProcessing() {
 				return
 			}
 
-			if len(localVal) > 0 {
-				timestamp, value = decodeTimestampVal(localVal)
-			}
+			timestamp, value = decodeTimestampVal(localVal)
 
 			// Find the most recent value
 
@@ -479,12 +480,10 @@ func (n *Dbnode) continueProcessing() {
 					continue
 				}
 
-				if len(res.Value) > 0 {
-					t, v := decodeTimestampVal(res.Value)
-					if t > timestamp {
-						timestamp = t
-						value = v
-					}
+				t, v := decodeTimestampVal(res.Value)
+				if t > timestamp {
+					timestamp = t
+					value = v
 				}
 
 				// Unlock each node
@@ -499,13 +498,14 @@ func (n *Dbnode) continueProcessing() {
 
 			// Return to client
 			n.Outgoing <- packet.Message{
-				Id:       n.clientRequest.Id,
-				Src:      n.id,
-				Dest:     n.clientRequest.Src,
-				DemuxKey: packet.ClientReadResponse,
-				Key:      n.clientRequest.Key,
-				Value:    value,
-				Ok:       true,
+				Id:        n.clientRequest.Id,
+				Src:       n.id,
+				Dest:      n.clientRequest.Src,
+				DemuxKey:  packet.ClientReadResponse,
+				Key:       n.clientRequest.Key,
+				Value:     value,
+				Timestamp: timestamp,
+				Ok:        true,
 			}
 
 			// Return to idle state
@@ -556,15 +556,12 @@ func (n *Dbnode) continueProcessing() {
 					continue
 				}
 
-				timestamp, _ := decodeTimestampVal(msg.Value)
-				if timestamp > latestTimestamp {
-					latestTimestamp = timestamp
+				if msg.Timestamp > latestTimestamp {
+					latestTimestamp = msg.Timestamp
 				}
 			}
 
-			value := make([]byte, 8+len(n.clientRequest.Value))
-			binary.BigEndian.PutUint64(value[:8], latestTimestamp+1)
-			copy(value[8:], n.clientRequest.Value)
+			value := encodeTimestampVal(latestTimestamp+1, n.clientRequest.Value)
 
 			n.uncommitedTxid = n.Store.Put(n.clientRequest.Key, value)
 			n.uncommitedKey = n.clientRequest.Key
@@ -575,31 +572,34 @@ func (n *Dbnode) continueProcessing() {
 				}
 
 				n.requestRepeater.Send(packet.Message{
-					Id:       n.clientRequest.Id,
-					Src:      n.id,
-					Dest:     id,
-					DemuxKey: packet.NodePutRequest,
-					Key:      n.clientRequest.Key,
-					Value:    value,
-					Ok:       true,
+					Id:        n.clientRequest.Id,
+					Src:       n.id,
+					Dest:      id,
+					DemuxKey:  packet.NodePutRequest,
+					Key:       n.clientRequest.Key,
+					Value:     n.clientRequest.Value,
+					Timestamp: latestTimestamp + 1,
+					Ok:        true,
 				}, true)
 			}
 
 			n.quorumMembers[n.id] = packet.Message{
-				DemuxKey: packet.NodeUnlockRequest,
+				DemuxKey:  packet.NodeUnlockRequest,
+				Timestamp: latestTimestamp + 1,
 			}
 			n.numWaitingNodes = n.writeQuorumSize - 1
 		case packet.NodeUnlockRequest:
 			ok := n.Store.Commit(n.uncommitedKey, n.uncommitedTxid)
 
 			n.Outgoing <- packet.Message{
-				Id:       n.clientRequest.Id,
-				Src:      n.id,
-				Dest:     n.clientRequest.Src,
-				DemuxKey: packet.ClientWriteResponse,
-				Key:      n.clientRequest.Key,
-				Value:    n.clientRequest.Value,
-				Ok:       ok,
+				Id:        n.clientRequest.Id,
+				Src:       n.id,
+				Dest:      n.clientRequest.Src,
+				DemuxKey:  packet.ClientWriteResponse,
+				Key:       n.clientRequest.Key,
+				Value:     n.clientRequest.Value,
+				Timestamp: n.quorumMembers[n.id].Timestamp,
+				Ok:        ok,
 			}
 
 			n.uncommitedKey = nil

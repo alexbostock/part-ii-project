@@ -12,6 +12,19 @@ import (
 	"github.com/alexbostock/part-ii-project/packet"
 )
 
+// A PutResponse indicates whether a put transaction succeeded, if that is
+// known. Error means transaction failed. Success means transaction was
+// completed successfully. Unknown means no response was received. Note that
+// this is only relevant to put requests, since get requests are idempotent
+// (so a get without a response is just a failure).
+type PutResponse int
+
+const (
+	Error PutResponse = iota
+	Success
+	Unknown
+)
+
 // A Client is an interface to the remote database system. it should be
 // instantiated using NewClient. All methods block until either a response is
 // received from the remote coordinator, or a timeout lapses.
@@ -69,10 +82,10 @@ func (c *Client) routeResponses() {
 
 // Get picks a random database node as coordinator, sends a ClientReadRequest
 // to that node, and either returns the response or returns an error response
-// when the request times out. The second return value ok is true iff the
+// when the request times out. The thirdreturn value ok is true iff the
 // request was successful. If ok, the first return value is the value returned
-// (which may be nil).
-func (c *Client) Get(key []byte) ([]byte, bool) {
+// (which may be nil) and the second is the timestamp associated with the value.
+func (c *Client) Get(key []byte) ([]byte, uint64, bool) {
 	for i := 0; i < c.numAttempts; i++ {
 		id := <-c.idStream
 
@@ -95,7 +108,7 @@ func (c *Client) Get(key []byte) ([]byte, bool) {
 		select {
 		case msg := <-resChan:
 			if msg.Ok {
-				return msg.Value, msg.Ok
+				return msg.Value, msg.Timestamp, msg.Ok
 			}
 		case <-timer.C:
 			continue
@@ -104,13 +117,13 @@ func (c *Client) Get(key []byte) ([]byte, bool) {
 		c.responseChans.Delete(id)
 	}
 
-	return nil, false
+	return nil, 0, false
 }
 
 // Put picks a random database node as coordinator, sends a ClientWriteRequest,
-// and either returns whether the transaction was successful, or returns false
-// if the requests times out.
-func (c *Client) Put(key, val []byte) bool {
+// and returns whether the transaction was successful (if possible). If the
+// transaction was successful, it returns a timestamp.
+func (c *Client) Put(key, val []byte) (resType PutResponse, timestamp uint64) {
 	for i := 0; i < c.numAttempts; i++ {
 		id := <-c.idStream
 
@@ -134,14 +147,19 @@ func (c *Client) Put(key, val []byte) bool {
 		select {
 		case msg := <-resChan:
 			if msg.Ok {
-				return true
+				resType = Success
+				timestamp = msg.Timestamp
+				return
+			} else {
+				resType = Error
 			}
 		case <-timer.C:
+			resType = Unknown
 			continue
 		}
 
 		c.responseChans.Delete(id)
 	}
 
-	return false
+	return
 }

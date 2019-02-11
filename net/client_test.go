@@ -33,7 +33,7 @@ func TestDatabase(t *testing.T) {
 	k := []byte{1}
 	v := []byte{10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
 
-	val, ok := client.Get(k)
+	val, _, ok := client.Get(k)
 	if len(val) > 0 {
 		t.Error("Reading unwritten key should return no value.")
 	}
@@ -41,12 +41,12 @@ func TestDatabase(t *testing.T) {
 		t.Error("Value not present should not be an error.")
 	}
 
-	ok = client.Put(k, v)
-	if !ok {
+	res, _ := client.Put(k, v)
+	if res == Error {
 		t.Error("Write transaction failed")
 	}
 
-	val, ok = client.Get(k)
+	val, _, ok = client.Get(k)
 	if !ok {
 		t.Error("Read transaction failed")
 	}
