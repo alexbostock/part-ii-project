@@ -23,7 +23,10 @@ const (
 	coordinatingWrite
 	processingRead
 	processingWrite
+	coordinatingFastRead
 )
+
+const fastReads = true
 
 // A Dbnode is a single database node. In order to behave like a node, it
 // should be instantiated with New. Public fields are Incoming and Outgoing
@@ -198,7 +201,11 @@ func (n *Dbnode) handleRequests() {
 
 				switch msg.DemuxKey {
 				case packet.ClientReadRequest:
-					n.currentMode = coordinatingRead
+					if fastReads {
+						n.currentMode = coordinatingFastRead
+					} else {
+						n.currentMode = coordinatingRead
+					}
 					n.continueProcessing()
 				case packet.ClientWriteRequest:
 					n.currentMode = assemblingQuorum
@@ -325,7 +332,8 @@ func (n *Dbnode) handleGetReq(msg packet.Message) {
 	var timestamp uint64
 	var ok bool
 
-	if n.currentMode == processingRead && n.currentTxid == msg.Id {
+	if n.currentMode == processingRead && n.currentTxid == msg.Id || fastReads &&
+		n.uncommitedKey == nil {
 		val, err := n.Store.Get(msg.Key)
 		ok = err == nil
 		if ok {
@@ -347,7 +355,9 @@ func (n *Dbnode) handleGetReq(msg packet.Message) {
 func (n *Dbnode) handleGetRes(msg packet.Message) {
 	n.requestRepeater.Ack(msg)
 
-	if n.currentTxid == msg.Id && (n.currentMode == coordinatingRead || n.currentMode == coordinatingWrite) {
+	if n.currentTxid == msg.Id && (n.currentMode == coordinatingRead ||
+		n.currentMode == coordinatingWrite ||
+		n.currentMode == coordinatingFastRead) {
 		if !msg.Ok {
 			n.abortProcessing()
 			return
@@ -432,6 +442,40 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 
 func (n *Dbnode) continueProcessing() {
 	switch n.currentMode {
+	case coordinatingFastRead:
+		if n.quorumMembers == nil {
+			n.assembleQuorum(n.readQuorumSize, packet.NodeGetRequest)
+
+			return
+		}
+
+		localVal, err := n.Store.Get(n.clientRequest.Key)
+		if err != nil {
+			n.abortProcessing()
+			return
+		}
+
+		timestamp, value := decodeTimestampVal(localVal)
+
+		for _, node := range n.quorumMembers {
+			if node.Timestamp > timestamp {
+				timestamp = node.Timestamp
+				value = node.Value
+			}
+		}
+
+		n.Outgoing <- packet.Message{
+			Id:        n.clientRequest.Id,
+			Src:       n.id,
+			Dest:      n.clientRequest.Src,
+			DemuxKey:  packet.ClientReadResponse,
+			Key:       n.clientRequest.Key,
+			Value:     value,
+			Timestamp: timestamp,
+			Ok:        true,
+		}
+
+		n.currentMode = idle
 	case coordinatingRead:
 		if n.quorumMembers == nil {
 			n.assembleQuorum(n.readQuorumSize, packet.NodeLockRequest)
@@ -461,9 +505,6 @@ func (n *Dbnode) continueProcessing() {
 
 			n.numWaitingNodes = n.readQuorumSize - 1
 		case packet.NodeUnlockRequest:
-			var timestamp uint64
-			var value []byte
-
 			// Read local value
 			localVal, err := n.Store.Get(n.clientRequest.Key)
 			if err != nil {
@@ -471,7 +512,7 @@ func (n *Dbnode) continueProcessing() {
 				return
 			}
 
-			timestamp, value = decodeTimestampVal(localVal)
+			timestamp, value := decodeTimestampVal(localVal)
 
 			// Find the most recent value
 
@@ -591,17 +632,6 @@ func (n *Dbnode) continueProcessing() {
 		case packet.NodeUnlockRequest:
 			ok := n.Store.Commit(n.uncommitedKey, n.uncommitedTxid)
 
-			n.Outgoing <- packet.Message{
-				Id:        n.clientRequest.Id,
-				Src:       n.id,
-				Dest:      n.clientRequest.Src,
-				DemuxKey:  packet.ClientWriteResponse,
-				Key:       n.clientRequest.Key,
-				Value:     n.clientRequest.Value,
-				Timestamp: n.quorumMembers[n.id].Timestamp,
-				Ok:        ok,
-			}
-
 			n.uncommitedKey = nil
 			n.uncommitedTxid = 0
 
@@ -617,6 +647,17 @@ func (n *Dbnode) continueProcessing() {
 					DemuxKey: packet.NodeUnlockRequest,
 					Ok:       true,
 				}, true)
+			}
+
+			n.Outgoing <- packet.Message{
+				Id:        n.clientRequest.Id,
+				Src:       n.id,
+				Dest:      n.clientRequest.Src,
+				DemuxKey:  packet.ClientWriteResponse,
+				Key:       n.clientRequest.Key,
+				Value:     n.clientRequest.Value,
+				Timestamp: n.quorumMembers[n.id].Timestamp,
+				Ok:        ok,
 			}
 
 			n.currentMode = idle
@@ -694,6 +735,13 @@ func (n *Dbnode) abortProcessing() {
 func (n *Dbnode) assembleQuorum(quorumSize int, requestType packet.Messagetype) {
 	n.quorumMembers = make(map[int]packet.Message)
 
+	var key []byte
+	var val []byte
+	if requestType == packet.NodeGetRequest {
+		key = n.clientRequest.Key
+		val = n.clientRequest.Value
+	}
+
 	peers := rand.Perm(n.numPeers)
 	for _, node := range peers[:quorumSize-1] {
 		if node == n.id {
@@ -704,6 +752,8 @@ func (n *Dbnode) assembleQuorum(quorumSize int, requestType packet.Messagetype) 
 			Src:      n.id,
 			Dest:     node,
 			DemuxKey: requestType,
+			Key:      key,
+			Value:    val,
 			Ok:       true,
 		}
 		n.requestRepeater.Send(n.quorumMembers[node], false)
