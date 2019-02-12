@@ -17,11 +17,18 @@ type logger struct {
 	lock      sync.Mutex
 }
 
-func (l *logger) log(msg string) {
+func (l *logger) log(startTime time.Duration, msg string) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	fmt.Printf("%v\t%v\n", time.Since(l.startTime).Nanoseconds()/1000, msg)
+	t1 := startTime.Nanoseconds() / 1000
+	t2 := l.timestamp().Nanoseconds() / 1000
+
+	fmt.Printf("%v %v %v\n", t1, t2, msg)
+}
+
+func (l *logger) timestamp() time.Duration {
+	return time.Since(l.startTime)
 }
 
 // Options represents the parameters with which to run the system. These map
@@ -160,15 +167,15 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 }
 
 func writeRequest(c *Client, l *logger, key, val []byte) {
-	l.log(fmt.Sprint("WriteRequest ", key, val))
+	startTime := l.timestamp()
 	res, timestamp := c.Put(key, val)
-	l.log(fmt.Sprint("WriteResponse ", key, val, timestamp, res))
+	l.log(startTime, fmt.Sprint("write ", key, val, timestamp, res))
 }
 
 func readRequest(c *Client, l *logger, key []byte) {
-	l.log(fmt.Sprint("ReadRequest ", key))
+	startTime := l.timestamp()
 	val, timestamp, ok := c.Get(key)
-	l.log(fmt.Sprint("ReadResponse ", key, val, timestamp, ok))
+	l.log(startTime, fmt.Sprint("read ", key, val, timestamp, ok))
 }
 
 func removeZeroBytes(b []byte) {

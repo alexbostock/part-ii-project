@@ -3,4 +3,5 @@ go test github.com/alexbostock/part-ii-project/datastore
 
 echo
 
-go run main.go | tee >(python3 transactionStats.py) | python3 consistencyTest.py
+go run main.go -t=1000 > output.log
+cat output.log | python3 parseOutput.py

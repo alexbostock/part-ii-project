@@ -25,6 +25,19 @@ const (
 	Unknown
 )
 
+func (p PutResponse) String() string {
+	switch p {
+	case Error:
+		return "error"
+	case Success:
+		return "success"
+	case Unknown:
+		return "unknown"
+	default:
+		return "UNKNOWN_RESPONSE_TYPE"
+	}
+}
+
 // A Client is an interface to the remote database system. it should be
 // instantiated using NewClient. All methods block until either a response is
 // received from the remote coordinator, or a timeout lapses.
