@@ -36,6 +36,9 @@ const (
 	NodePutResponse
 	NodeTimestampRequest
 
+	NodeBackgroundWriteRequest
+	NodeBackgroundWriteResponse
+
 	InternalTimerSignal
 
 	ControlFail

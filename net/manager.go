@@ -46,18 +46,24 @@ type Options struct {
 	ReadQuorumSize              *uint
 	WriteQuorumSize             *uint
 	NumAttempts                 *uint
+	SloppyQuorum                *bool
 }
 
 // Simulate starts database nodes, sets up the simulated network, and sends
 // random client requests as tests, based on the given parameters.
 func Simulate(o Options) {
+	sloppyQuorum := *o.SloppyQuorum
+
 	numNodes := *o.NumNodes
 
 	rqs := *o.ReadQuorumSize
 	wqs := *o.WriteQuorumSize
 
 	if wqs <= numNodes/2 {
-		log.Fatal("Write quorum size must greater than half the number of nodes")
+		log.Fatal("Write quorum size must greater than half the number of nodes.")
+	}
+	if !sloppyQuorum && rqs+wqs <= numNodes {
+		log.Fatal("Strict quorum requires V_R + V_W > n.")
 	}
 
 	rand.Seed(*o.RandomSeed)
@@ -70,7 +76,7 @@ func Simulate(o Options) {
 
 	var i uint
 	for i = 0; i < numNodes; i++ {
-		nodes[i] = dbnode.New(int(numNodes), int(i), timeout, *o.PersistentStore, rqs, wqs)
+		nodes[i] = dbnode.New(int(numNodes), int(i), timeout, *o.PersistentStore, rqs, wqs, sloppyQuorum)
 		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes)
 	}
 

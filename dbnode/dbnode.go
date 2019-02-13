@@ -3,6 +3,7 @@
 package dbnode
 
 import (
+	"bytes"
 	"log"
 	"math/rand"
 	"path/filepath"
@@ -52,7 +53,8 @@ type Dbnode struct {
 	// The number of nodes we are waiting for before we can continue
 	numWaitingNodes int
 
-	requestRepeater *repeater.Repeater
+	requestRepeater       *repeater.Repeater
+	backgroundWriteDaemon *propagater
 
 	uncommitedTxid int
 	uncommitedKey  []byte
@@ -76,7 +78,8 @@ type Dbnode struct {
 // main memory.
 // rqs: the minimum size of a reqad quorum.
 // wqs: the minimum size of a write quorum.
-func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uint, wqs uint) *Dbnode {
+// sloppyQuorum: true enables background writes to achieve eventual consistency.
+func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uint, wqs uint, sloppyQuorum bool) *Dbnode {
 	outgoing := make(chan packet.Message, 1000)
 
 	var store datastore.Store
@@ -84,6 +87,11 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 		store = datastore.New(filepath.Join("data", strconv.Itoa(id)))
 	} else {
 		store = datastore.New("")
+	}
+
+	var p *propagater
+	if sloppyQuorum {
+		p = newPropagater(id, n, int(rqs), outgoing)
 	}
 
 	state := &Dbnode{
@@ -97,8 +105,9 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 		Store:           store,
 		currentTxid:     -1,
 
-		requestRepeater: repeater.New(n, outgoing, lockTimeout, 3),
-		unlockTxids:     make(map[int]bool),
+		requestRepeater:       repeater.New(n, outgoing, lockTimeout, 3),
+		backgroundWriteDaemon: p,
+		unlockTxids:           make(map[int]bool),
 	}
 
 	go state.handleRequests()
@@ -181,6 +190,10 @@ func (n *Dbnode) handleRequests() {
 				n.handlePutRes(msg)
 			case packet.NodeTimestampRequest:
 				n.handleTimestampReq(msg)
+			case packet.NodeBackgroundWriteRequest:
+				n.handleBackgroundWriteReq(msg)
+			case packet.NodeBackgroundWriteResponse:
+				n.handleBackgroundWriteRes(msg)
 			case packet.InternalTimerSignal:
 				// Do nothing (already dealt with above)
 			default:
@@ -334,7 +347,8 @@ func (n *Dbnode) handleGetReq(msg packet.Message) {
 
 	if n.currentMode == processingRead && n.currentTxid == msg.Id || fastReads &&
 		n.uncommitedKey == nil {
-		val, err := n.Store.Get(msg.Key)
+		var err error
+		val, err = n.Store.Get(msg.Key)
 		ok = err == nil
 		if ok {
 			timestamp, val = decodeTimestampVal(val)
@@ -434,9 +448,61 @@ func (n *Dbnode) handleTimestampReq(msg packet.Message) {
 		Dest:      msg.Src,
 		DemuxKey:  packet.NodeGetResponse,
 		Key:       msg.Key,
-		Value:     val,
 		Timestamp: timestamp,
 		Ok:        true,
+	}
+}
+
+func (n *Dbnode) handleBackgroundWriteReq(msg packet.Message) {
+	currentVal, _ := n.Store.Get(msg.Key)
+	currentTimestamp, currentVal := decodeTimestampVal(currentVal)
+
+	if msg.Timestamp == currentTimestamp && !bytes.Equal(currentVal, msg.Value) {
+		log.Fatal("Inconsistent values with same timestamp", currentVal, msg.Value)
+	}
+	if msg.Timestamp > currentTimestamp {
+		value := encodeTimestampVal(msg.Timestamp, msg.Value)
+		txid := n.Store.Put(msg.Key, value)
+		n.Store.Commit(msg.Key, txid)
+	}
+	if msg.Timestamp >= currentTimestamp {
+		n.Outgoing <- packet.Message{
+			Id:        msg.Id,
+			Src:       n.id,
+			Dest:      msg.Src,
+			DemuxKey:  packet.NodeBackgroundWriteResponse,
+			Key:       msg.Key,
+			Value:     msg.Value,
+			Timestamp: msg.Timestamp,
+			Ok:        true,
+		}
+	} else {
+		n.Outgoing <- packet.Message{
+			Id:        msg.Id,
+			Src:       n.id,
+			Dest:      msg.Src,
+			DemuxKey:  packet.NodeBackgroundWriteResponse,
+			Key:       msg.Key,
+			Value:     currentVal,
+			Timestamp: currentTimestamp,
+			Ok:        false,
+		}
+	}
+}
+
+func (n *Dbnode) handleBackgroundWriteRes(msg packet.Message) {
+	n.backgroundWriteDaemon.response(msg)
+
+	currentVal, _ := n.Store.Get(msg.Key)
+	currentTimestamp, currentVal := decodeTimestampVal(currentVal)
+
+	if msg.Timestamp == currentTimestamp && !bytes.Equal(currentVal, msg.Value) {
+		log.Fatal("Inconsistent values with same timestamp", currentVal, msg.Value)
+	}
+	if msg.Timestamp > currentTimestamp {
+		value := encodeTimestampVal(msg.Timestamp, msg.Value)
+		txid := n.Store.Put(msg.Key, value)
+		n.Store.Commit(msg.Key, txid)
 	}
 }
 
@@ -476,6 +542,9 @@ func (n *Dbnode) continueProcessing() {
 		}
 
 		n.currentMode = idle
+		n.currentTxid = -1
+		n.quorumMembers = nil
+		n.numWaitingNodes = 0
 	case coordinatingRead:
 		if n.quorumMembers == nil {
 			n.assembleQuorum(n.readQuorumSize, packet.NodeLockRequest)
@@ -658,6 +727,15 @@ func (n *Dbnode) continueProcessing() {
 				Value:     n.clientRequest.Value,
 				Timestamp: n.quorumMembers[n.id].Timestamp,
 				Ok:        ok,
+			}
+
+			if n.backgroundWriteDaemon != nil {
+				n.backgroundWriteDaemon.propagateTransaction(
+					n.clientRequest.Id,
+					n.quorumMembers,
+					n.clientRequest.Key,
+					n.clientRequest.Value,
+					n.quorumMembers[n.id].Timestamp)
 			}
 
 			n.currentMode = idle

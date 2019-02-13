@@ -73,6 +73,9 @@ class Transaction:
 
         self.time_taken = self.end_time - self.start_time
 
+    def print(self):
+        print(self.start_time, self.end_time, self.type, self.key, self.value, self.timestamp)
+
 total_reads = 0
 total_writes = 0
 
@@ -143,7 +146,7 @@ for key, ts in transactions.items():
             if t.start_time > u.start_time:
                 continue
 
-            # T happens before and strong_consistency => t.timestamp >= u.timestamp
+            # t happens before u and strong_consistency => t.timestamp >= u.timestamp
             if t.end_time < u.start_time and t.timestamp > u.timestamp:
                 strongly_consistent = False
 

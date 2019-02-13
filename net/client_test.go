@@ -18,7 +18,7 @@ func TestDatabase(t *testing.T) {
 	failedNodes := failed{nodes: make(map[int]bool)}
 
 	for i := 0; i < numNodes; i++ {
-		nodes[i] = dbnode.New(numNodes, i, timeout, false, quorumSize, quorumSize)
+		nodes[i] = dbnode.New(numNodes, i, timeout, false, quorumSize, quorumSize, false)
 		go startHelper(nodes[i].Outgoing, nodes, 0, 0, failedNodes)
 	}
 
@@ -52,5 +52,26 @@ func TestDatabase(t *testing.T) {
 	}
 	if !bytes.Equal(v, val) {
 		t.Error("Incorrect value read", val)
+	}
+
+	for i := 0; i < 100; i++ {
+		val, _, ok = client.Get(k)
+		if ok && !bytes.Equal(v, val) {
+			t.Error("Strong consistency test failed")
+		}
+	}
+
+	v = []byte{77, 83, 91, 12, 240, 15}
+
+	res, _ = client.Put(k, v)
+	if res != Success {
+		t.Error("Write transaction failed")
+	} else {
+		for i := 0; i < 100; i++ {
+			val, _, ok = client.Get(k)
+			if ok && !bytes.Equal(v, val) {
+				t.Error("Strong consistency test failed")
+			}
+		}
 	}
 }
