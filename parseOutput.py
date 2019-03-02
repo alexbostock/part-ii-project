@@ -1,5 +1,11 @@
+#!/usr/bin/env python3
 # A script to parse transaction logs from stdin
 # eg. go run main.go | python3 parseOutput.py
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+import json
 
 import re
 import sys
@@ -46,6 +52,10 @@ int_pattern = re.compile('(?P<val>[0-9]+)(?P<tail>.*)')
 str_pattern = re.compile('(?P<val>[a-zA-Z]+)(?P<tail>.*)')
 byte_array_pattern = re.compile('(?P<val>\[([0-9]+(\s[0-9]+)*)?\])(?P<tail>.*)')
 
+json_pattern = re.compile('^\{.*\}$')
+
+two_ints_pattern = re.compile('^[0-9]+\s[0-9]+')
+
 class Transaction:
     def parse(self, pattern):
         if self.line[0] == ' ':
@@ -89,36 +99,58 @@ time_taken_writes = 0
 
 transactions = {} # Keyed by key
 
+jsons = []
+
 for line in sys.stdin:
-    t = Transaction(line)
+    m = str_pattern.match(line)
+    if m != None:
+        continue
 
-    if t.key not in transactions:
-        transactions[t.key] = set()
-    transactions[t.key].add(t)
+    m = json_pattern.match(line)
 
-    total_time_taken = max(total_time_taken, t.end_time)
+    if m == None:
+        m = two_ints_pattern.match(line)
+        if m == None:
+            continue
 
-    if t.type == READ:
-        total_reads += 1
-        time_taken_reads += t.time_taken
+        t = Transaction(line)
 
-        if t.ok == SUCCESS:
-            successful_reads += 1
+        if t.key not in transactions:
+            transactions[t.key] = set()
+        transactions[t.key].add(t)
+
+        total_time_taken = max(total_time_taken, t.end_time)
+
+        if t.type == READ:
+            total_reads += 1
+            time_taken_reads += t.time_taken
+
+            if t.ok == SUCCESS:
+                successful_reads += 1
+        else:
+            total_writes += 1
+            time_taken_writes += t.time_taken
+
+            if t.ok == SUCCESS:
+                successful_writes += 1
+            elif t.ok == FAILURE:
+                failed_writes += 1
+
     else:
-        total_writes += 1
-        time_taken_writes += t.time_taken
+        jsons.append(line)
 
-        if t.ok == SUCCESS:
-            successful_writes += 1
-        elif t.ok == FAILURE:
-            failed_writes += 1
+def div(x, y):
+    if x == y == 0:
+        return 0
+    else:
+        return x / y
 
 print('Total time taken (milliseconds):', int(total_time_taken/1000))
 print(total_reads, 'reads and', total_writes, 'writes processed')
-print('Average read response time (ms):', int(time_taken_reads/1000 / total_reads))
-print('Average write response time (ms):', int(time_taken_writes/1000 / total_writes))
-print(successful_reads, '(' + str(int(100*successful_reads/total_reads)) + '%) reads were successful')
-print(successful_writes, '(' + str(int(100*successful_writes/total_writes)) + '%) writes were successful')
+print('Average read response time (ms):', int(div(time_taken_reads/1000, total_reads)))
+print('Average write response time (ms):', int(div(time_taken_writes/1000, total_writes)))
+print(successful_reads, '(' + str(int(100*div(successful_reads, total_reads))) + '%) reads were successful')
+print(successful_writes, '(' + str(int(100*div(successful_writes, total_writes))) + '%) writes were successful')
 print(total_writes-successful_writes-failed_writes, 'writes have unknown response')
 
 print()
@@ -156,3 +188,10 @@ elif eventually_consistent:
     print('Output appears to be eventually consistent.')
 else:
     print('Output appears to be neither strongly consistent nor eventually consistent.')
+
+if len(jsons) > 1 and len(sys.argv) > 1:
+    messages = json.loads(jsons[0])
+    nodes = json.loads(jsons[1])
+
+    pd.DataFrame(nodes).transpose().plot(kind='area')
+    plt.show()

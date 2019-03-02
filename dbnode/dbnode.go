@@ -64,6 +64,9 @@ type Dbnode struct {
 	unlockTxids map[int]bool
 
 	disabled bool
+
+	stateQueryReq chan bool
+	stateQueryRes chan int
 }
 
 // New creates a new database node and starts the main loop to handle requests
@@ -76,7 +79,7 @@ type Dbnode struct {
 // lockTimeout: the time to wait before aborting a transaction (where applicable).
 // persistentStore: indicates whether the underlying store should use disk or
 // main memory.
-// rqs: the minimum size of a reqad quorum.
+// rqs: the minimum size of a read quorum.
 // wqs: the minimum size of a write quorum.
 // sloppyQuorum: true enables background writes to achieve eventual consistency.
 func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uint, wqs uint, sloppyQuorum bool) *Dbnode {
@@ -108,6 +111,9 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 		requestRepeater:       repeater.New(n, outgoing, lockTimeout, 3),
 		backgroundWriteDaemon: p,
 		unlockTxids:           make(map[int]bool),
+
+		stateQueryReq: make(chan bool),
+		stateQueryRes: make(chan int),
 	}
 
 	go state.handleRequests()
@@ -164,10 +170,8 @@ func (n *Dbnode) handleRequests() {
 			}
 
 			switch msg.DemuxKey {
-			case packet.ClientReadRequest:
-				n.lockRequests.enqueue(&msg)
-			case packet.ClientWriteRequest:
-				n.lockRequests.enqueue(&msg)
+			case packet.ClientReadRequest, packet.ClientWriteRequest:
+				fallthrough
 			case packet.NodeLockRequest, packet.NodeLockRequestNoTimeout:
 				n.lockRequests.enqueue(&msg)
 				go func() {
@@ -271,6 +275,8 @@ func (n *Dbnode) handleRequests() {
 					Ok:       false,
 				}
 			}
+		case <-n.stateQueryReq:
+			n.stateQueryRes <- n.currentTxid
 		}
 	}
 }
@@ -323,9 +329,9 @@ func (n *Dbnode) handleUnlockReq(msg packet.Message) {
 	if n.currentTxid == msg.Id {
 		n.currentMode = idle
 		n.currentTxid = -1
-	} else {
-		n.unlockTxids[msg.Id] = true
 	}
+
+	n.unlockTxids[msg.Id] = true
 
 	n.Outgoing <- packet.Message{
 		Id:       msg.Id,
@@ -700,6 +706,10 @@ func (n *Dbnode) continueProcessing() {
 			n.numWaitingNodes = n.writeQuorumSize - 1
 		case packet.NodeUnlockRequest:
 			ok := n.Store.Commit(n.uncommitedKey, n.uncommitedTxid)
+			if !ok {
+				n.abortProcessing()
+				return
+			}
 
 			n.uncommitedKey = nil
 			n.uncommitedTxid = 0
@@ -726,7 +736,7 @@ func (n *Dbnode) continueProcessing() {
 				Key:       n.clientRequest.Key,
 				Value:     n.clientRequest.Value,
 				Timestamp: n.quorumMembers[n.id].Timestamp,
-				Ok:        ok,
+				Ok:        true,
 			}
 
 			if n.backgroundWriteDaemon != nil {
@@ -849,4 +859,10 @@ func (n *Dbnode) assembleQuorum(quorumSize int, requestType packet.Messagetype) 
 	}
 
 	n.numWaitingNodes = quorumSize - 1
+}
+
+// QueryState is for debugging/monitoring purposes. It returns currentTxid.
+func (n *Dbnode) QueryState() int {
+	n.stateQueryReq <- true
+	return <-n.stateQueryRes
 }

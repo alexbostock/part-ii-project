@@ -45,3 +45,7 @@ func (q *queue) contains(msg *packet.Message) bool {
 
 	return false
 }
+
+func (q *queue) length() int {
+	return len(q.values)
+}

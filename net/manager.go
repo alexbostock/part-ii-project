@@ -71,13 +71,15 @@ func Simulate(o Options) {
 	nodes := make([]*dbnode.Dbnode, numNodes+1)
 	failedNodes := failed{nodes: make(map[int]bool)}
 
+	monitor := newMonitor(nodes)
+
 	// TODO: Parameterise timeout length
 	timeout := 500 * time.Millisecond
 
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		nodes[i] = dbnode.New(int(numNodes), int(i), timeout, *o.PersistentStore, rqs, wqs, sloppyQuorum)
-		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes)
+		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes, monitor)
 	}
 
 	// Address numNodes is the "client" address, used by the manager
@@ -88,9 +90,9 @@ func Simulate(o Options) {
 
 	timer := &logger{startTime: time.Now()}
 
-	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes)
+	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes, monitor)
 
-	sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NodeFailureChance, failedNodes, *o.NumAttempts)
+	sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NodeFailureChance, failedNodes, *o.NumAttempts, monitor)
 
 	for _, node := range nodes {
 		if node.Store != nil {
@@ -99,7 +101,7 @@ func Simulate(o Options) {
 	}
 }
 
-func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean float64, stddev float64, failedNodes failed) {
+func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean float64, stddev float64, failedNodes failed, m *monitor) {
 	for msg := range outgoing {
 		if failedNodes.disabled(msg.Src) || failedNodes.disabled(msg.Dest) {
 			continue
@@ -124,8 +126,8 @@ func sendAfterDelay(msg packet.Message, link chan packet.Message, delay time.Dur
 	link <- msg
 }
 
-func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTransactions uint, transactionRate, proportionWrites, nodeFailureChance float64, failedNodes failed, numAttempts uint) {
-	client := NewClient(nodes, timeout, int(numAttempts))
+func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTransactions uint, transactionRate, proportionWrites, nodeFailureChance float64, failedNodes failed, numAttempts uint, m *monitor) {
+	client := NewClient(nodes, 10*timeout, int(numAttempts))
 
 	var i uint
 	for i = 0; i < numTransactions; i++ {
@@ -170,6 +172,13 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 
 	// Wait for the last responses before halting)
 	time.Sleep(20 * timeout)
+
+	m.stop()
+
+	for _, node := range nodes {
+		fmt.Println()
+		fmt.Println(node)
+	}
 }
 
 func writeRequest(c *Client, l *logger, key, val []byte) {
