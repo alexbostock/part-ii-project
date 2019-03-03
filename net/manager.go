@@ -79,7 +79,6 @@ func Simulate(o Options) {
 	var i uint
 	for i = 0; i < numNodes; i++ {
 		nodes[i] = dbnode.New(int(numNodes), int(i), timeout, *o.PersistentStore, rqs, wqs, sloppyQuorum)
-		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes, monitor)
 	}
 
 	// Address numNodes is the "client" address, used by the manager
@@ -89,6 +88,12 @@ func Simulate(o Options) {
 	}
 
 	timer := &logger{startTime: time.Now()}
+
+	// Start the network only after all nodes have been created to avoid
+	// deferencing nil pointers
+	for i = 0; i < numNodes; i++ {
+		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes, monitor)
+	}
 
 	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes, monitor)
 

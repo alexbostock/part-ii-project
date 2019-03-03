@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alexbostock/part-ii-project/datastore"
+	"github.com/alexbostock/part-ii-project/dbnode/elector"
 	"github.com/alexbostock/part-ii-project/dbnode/repeater"
 	"github.com/alexbostock/part-ii-project/packet"
 )
@@ -63,6 +64,8 @@ type Dbnode struct {
 	// unlock received before corresponding lock.
 	unlockTxids map[int]bool
 
+	elector elector.Elector
+
 	disabled bool
 
 	stateQueryReq chan bool
@@ -114,6 +117,8 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 
 		stateQueryReq: make(chan bool),
 		stateQueryRes: make(chan int),
+
+		elector: elector.New(id, n, outgoing),
 	}
 
 	go state.handleRequests()
@@ -170,9 +175,17 @@ func (n *Dbnode) handleRequests() {
 			}
 
 			switch msg.DemuxKey {
-			case packet.ClientReadRequest, packet.ClientWriteRequest:
-				fallthrough
-			case packet.NodeLockRequest, packet.NodeLockRequestNoTimeout:
+			case packet.ClientWriteRequest:
+				if n.elector.Leader() == n.id {
+					n.lockRequests.enqueue(&msg)
+					go func() {
+						time.Sleep(n.lockTimeout)
+						timedOutLockRequests <- &msg
+					}()
+				} else {
+					n.elector.ForwardToLeader(msg)
+				}
+			case packet.ClientReadRequest, packet.NodeLockRequest, packet.NodeLockRequestNoTimeout:
 				n.lockRequests.enqueue(&msg)
 				go func() {
 					time.Sleep(n.lockTimeout)
@@ -200,6 +213,8 @@ func (n *Dbnode) handleRequests() {
 				n.handleBackgroundWriteRes(msg)
 			case packet.InternalTimerSignal:
 				// Do nothing (already dealt with above)
+			case packet.ElectionElect, packet.ElectionCoordinator, packet.ElectionAck:
+				n.elector.ProcessMsg(msg)
 			default:
 				log.Fatal("Unexpected message type", msg)
 			}
