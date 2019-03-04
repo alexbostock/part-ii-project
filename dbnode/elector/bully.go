@@ -21,6 +21,8 @@ type bully struct {
 	messageQueue       chan packet.Message
 	leaderQueryResChan chan int
 	requestsToForward  chan packet.Message
+
+	disabled bool
 }
 
 func newBully(id, n int, outgoing chan packet.Message) *bully {
@@ -48,6 +50,23 @@ func (b *bully) mainLoop() {
 	go b.setTimer(timeoutCounter)
 
 	for msg := range b.messageQueue {
+		if b.disabled || msg.DemuxKey == packet.ControlRecover {
+			if b.disabled && msg.DemuxKey == packet.ControlRecover {
+				b.disabled = false
+				timeoutCounter = 0
+				go b.setTimer(timeoutCounter)
+
+				b.startElection()
+			}
+
+			continue
+		}
+
+		if msg.DemuxKey == packet.ControlFail {
+			b.disabled = true
+			continue
+		}
+
 		if msg.DemuxKey == packet.InternalTimerSignal {
 			if msg.Id == timeoutCounter {
 				if b.leader == -1 && b.maybeLeader {

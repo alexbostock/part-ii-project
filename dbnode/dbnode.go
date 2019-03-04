@@ -138,19 +138,27 @@ func (n *Dbnode) handleRequests() {
 	for {
 		select {
 		case msg := <-n.Incoming:
-			if n.disabled {
-				if msg.DemuxKey == packet.ControlRecover {
+			if n.disabled || msg.DemuxKey == packet.ControlRecover {
+				if n.disabled && msg.DemuxKey == packet.ControlRecover {
 					n.disabled = false
 					timeoutCounter = 0
 					go n.setTimer(timeoutCounter)
+
+					n.requestRepeater.Recover()
 				}
-				continue
-			} else if msg.DemuxKey == packet.ControlRecover {
+
 				continue
 			}
 
 			if msg.DemuxKey == packet.ControlFail {
 				n.disabled = true
+
+				n.requestRepeater.Fail()
+
+				n.elector.ProcessMsg(packet.Message{
+					DemuxKey: packet.ControlFail,
+				})
+
 				continue
 			}
 

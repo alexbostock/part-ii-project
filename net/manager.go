@@ -39,7 +39,9 @@ type Options struct {
 	TransactionRate             *float64
 	MeanMsgLatency              *float64
 	MsgLatencyVariance          *float64
-	NodeFailureChance           *float64
+	NodeFailureRate             *float64
+	MeanFailTime                *float64
+	FailTimeVariance            *float64
 	NumTransactions             *uint
 	ProportionWriteTransactions *float64
 	PersistentStore             *bool
@@ -69,7 +71,6 @@ func Simulate(o Options) {
 	rand.Seed(*o.RandomSeed)
 
 	nodes := make([]*dbnode.Dbnode, numNodes+1)
-	failedNodes := failed{nodes: make(map[int]bool)}
 
 	monitor := newMonitor(nodes)
 
@@ -92,12 +93,16 @@ func Simulate(o Options) {
 	// Start the network only after all nodes have been created to avoid
 	// deferencing nil pointers
 	for i = 0; i < numNodes; i++ {
-		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes, monitor)
+		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), monitor)
 	}
 
-	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), failedNodes, monitor)
+	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), monitor)
 
-	sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NodeFailureChance, failedNodes, *o.NumAttempts, monitor)
+	if *o.NodeFailureRate > 0 {
+		go triggerNodeFailures(nodes, *o.NodeFailureRate, *o.MeanFailTime, *o.FailTimeVariance, timer)
+	}
+
+	sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NumAttempts, monitor)
 
 	for _, node := range nodes {
 		if node.Store != nil {
@@ -106,12 +111,8 @@ func Simulate(o Options) {
 	}
 }
 
-func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean float64, stddev float64, failedNodes failed, m *monitor) {
+func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean float64, stddev float64, m *monitor) {
 	for msg := range outgoing {
-		if failedNodes.disabled(msg.Src) || failedNodes.disabled(msg.Dest) {
-			continue
-		}
-
 		if msg.Dest < len(links) {
 			// Normally distributed delay for now
 			// TODO: better simulation of tcp latency
@@ -131,7 +132,7 @@ func sendAfterDelay(msg packet.Message, link chan packet.Message, delay time.Dur
 	link <- msg
 }
 
-func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTransactions uint, transactionRate, proportionWrites, nodeFailureChance float64, failedNodes failed, numAttempts uint, m *monitor) {
+func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTransactions uint, transactionRate, proportionWrites float64, numAttempts uint, m *monitor) {
 	client := NewClient(nodes, 10*timeout, int(numAttempts))
 
 	var i uint
@@ -140,27 +141,6 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 		key := make([]byte, 1)
 		rand.Read(key)
 		removeZeroBytes(key)
-
-		// Chance of making a random node fail
-		if rand.Float64() < nodeFailureChance {
-			id := int(rand.Float64() * float64(len(nodes)-1))
-
-			failedNodes.fail(id)
-			nodes[id].Incoming <- packet.Message{
-				DemuxKey: packet.ControlFail,
-			}
-		}
-
-		// Chance of making a random node recover from failure
-		if rand.Float64() < nodeFailureChance {
-			id := failedNodes.unfailRand()
-
-			if id >= 0 {
-				nodes[id].Incoming <- packet.Message{
-					DemuxKey: packet.ControlRecover,
-				}
-			}
-		}
 
 		if rand.Float64() < proportionWrites {
 			val := make([]byte, 8)
@@ -183,6 +163,30 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 	for _, node := range nodes {
 		fmt.Println()
 		fmt.Println(node)
+	}
+}
+
+func triggerNodeFailures(nodes []*dbnode.Dbnode, failRate, mean, variance float64, l *logger) {
+	stddev := math.Sqrt(variance)
+
+	for {
+		time.Sleep(time.Duration(rand.ExpFloat64()/(failRate/100)) * time.Second)
+
+		id := int(rand.Float64() * float64(len(nodes)-1))
+
+		nodes[id].Incoming <- packet.Message{
+			DemuxKey: packet.ControlFail,
+		}
+
+		delay := rand.NormFloat64()*stddev + mean
+
+		go func(node *dbnode.Dbnode, delay time.Duration) {
+			time.Sleep(delay)
+
+			node.Incoming <- packet.Message{
+				DemuxKey: packet.ControlRecover,
+			}
+		}(nodes[id], time.Duration(delay)*time.Second)
 	}
 }
 

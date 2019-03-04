@@ -22,6 +22,8 @@ type Repeater struct {
 
 	// nodeID -> txID -> messageType -> bool
 	unackedReqs map[int]map[int]map[packet.Messagetype]bool
+
+	disabled bool
 }
 
 // New creates an instance of Repeater. numNodes is the total number of
@@ -82,19 +84,23 @@ func (r *Repeater) send(msg packet.Message, demuxKey packet.Messagetype, unlimit
 	for i := 0; i < r.numRetries; i++ {
 		r.lock.Lock()
 
-		if !r.unackedReqs[msg.Dest][msg.Id][demuxKey] {
+		if !r.disabled {
+			if !r.unackedReqs[msg.Dest][msg.Id][demuxKey] {
+				r.lock.Unlock()
+				return
+			}
+
+			r.outgoing <- msg
+
 			r.lock.Unlock()
-			return
 		}
-
-		r.outgoing <- msg
-
-		r.lock.Unlock()
-
-		time.Sleep(r.timeout)
 
 		if unlimited {
 			i--
+		}
+
+		if !r.disabled || unlimited {
+			time.Sleep(r.timeout)
 		}
 	}
 }
@@ -110,4 +116,21 @@ func (r *Repeater) Ack(msg packet.Message) {
 	if r.unackedReqs[msg.Src][msg.Id][msg.DemuxKey] {
 		delete(r.unackedReqs[msg.Src][msg.Id], msg.DemuxKey)
 	}
+}
+
+// Fail makes the module stop sending messages, to simulate node failure. This
+// also cancels resending of any message without unlimitedRepeats.
+func (r *Repeater) Fail() {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.disabled = true
+}
+
+// Recover makes the module resume from a failure.
+func (r *Repeater) Recover() {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.disabled = false
 }
