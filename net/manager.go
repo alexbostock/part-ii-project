@@ -61,11 +61,20 @@ func Simulate(o Options) {
 	rqs := *o.ReadQuorumSize
 	wqs := *o.WriteQuorumSize
 
+	if rqs >= numNodes {
+		log.Fatal("Read quorum size must be smaller than the number of nodes.")
+	}
+	if wqs >= numNodes {
+		log.Fatal("Write quorum size must be smaller than the number of nodes.")
+	}
 	if wqs <= numNodes/2 {
 		log.Fatal("Write quorum size must greater than half the number of nodes.")
 	}
 	if !sloppyQuorum && rqs+wqs <= numNodes {
 		log.Fatal("Strict quorum requires V_R + V_W > n.")
+	}
+	if *o.TransactionRate <= 0 {
+		log.Fatal("Transaction rate must be greater than 0.")
 	}
 
 	rand.Seed(*o.RandomSeed)
