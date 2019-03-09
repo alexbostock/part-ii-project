@@ -64,7 +64,8 @@ type Dbnode struct {
 	// unlock received before corresponding lock.
 	unlockTxids map[int]bool
 
-	elector elector.Elector
+	internalTimer chan int
+	elector       elector.Elector
 
 	disabled bool
 
@@ -118,7 +119,8 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 		stateQueryReq: make(chan bool),
 		stateQueryRes: make(chan int),
 
-		elector: elector.New(id, n, outgoing),
+		internalTimer: make(chan int),
+		elector:       elector.New(id, n, outgoing),
 	}
 
 	go state.handleRequests()
@@ -130,8 +132,10 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 // must not block; all blocking operations should be in separate goroutines,
 // which communicate with the main loop by sending messages.
 func (n *Dbnode) handleRequests() {
+	go n.setInternalTimer()
+
 	timeoutCounter := 0
-	go n.setTimer(timeoutCounter)
+	n.internalTimer <- timeoutCounter
 
 	timedOutLockRequests := make(chan *packet.Message, 10)
 
@@ -142,7 +146,7 @@ func (n *Dbnode) handleRequests() {
 				if n.disabled && msg.DemuxKey == packet.ControlRecover {
 					n.disabled = false
 					timeoutCounter = 0
-					go n.setTimer(timeoutCounter)
+					n.internalTimer <- timeoutCounter
 
 					n.requestRepeater.Recover()
 				}
@@ -177,9 +181,14 @@ func (n *Dbnode) handleRequests() {
 						n.abortProcessing()
 					}
 				}
-				go n.setTimer(timeoutCounter)
+				n.internalTimer <- timeoutCounter
 			} else {
 				timeoutCounter++
+			}
+
+			// Occasionally delete stale unlockTxids
+			if msg.DemuxKey == packet.ElectionElect {
+				n.cleanUnlockTxids()
 			}
 
 			switch msg.DemuxKey {
@@ -306,13 +315,33 @@ func (n *Dbnode) handleRequests() {
 	}
 }
 
-func (n *Dbnode) setTimer(counter int) {
-	time.Sleep(n.lockTimeout)
-	n.Incoming <- packet.Message{
-		Id:       counter,
-		Src:      n.id,
-		Dest:     n.id,
-		DemuxKey: packet.InternalTimerSignal,
+func (n *Dbnode) setInternalTimer() {
+	for {
+		c := <-n.internalTimer
+		time.Sleep(n.lockTimeout)
+		n.Incoming <- packet.Message{
+			Id:       c,
+			Src:      n.id,
+			Dest:     n.id,
+			DemuxKey: packet.InternalTimerSignal,
+		}
+	}
+}
+
+func (n *Dbnode) cleanUnlockTxids() {
+	var threshold int
+	for id := range n.unlockTxids {
+		if id > threshold {
+			threshold = id
+		}
+	}
+
+	threshold -= 50
+
+	for id := range n.unlockTxids {
+		if id < threshold {
+			delete(n.unlockTxids, id)
+		}
 	}
 }
 

@@ -23,6 +23,8 @@ type bully struct {
 	requestsToForward  chan packet.Message
 
 	disabled bool
+
+	internalTimer chan int
 }
 
 func newBully(id, n int, outgoing chan packet.Message) *bully {
@@ -37,6 +39,8 @@ func newBully(id, n int, outgoing chan packet.Message) *bully {
 		messageQueue:       make(chan packet.Message, 10),
 		leaderQueryResChan: make(chan int),
 		requestsToForward:  make(chan packet.Message, 100),
+
+		internalTimer: make(chan int),
 	}
 
 	go b.mainLoop()
@@ -46,15 +50,17 @@ func newBully(id, n int, outgoing chan packet.Message) *bully {
 }
 
 func (b *bully) mainLoop() {
+	go b.startInternalTimer()
+
 	timeoutCounter := 0
-	go b.setTimer(timeoutCounter)
+	b.internalTimer <- timeoutCounter
 
 	for msg := range b.messageQueue {
 		if b.disabled || msg.DemuxKey == packet.ControlRecover {
 			if b.disabled && msg.DemuxKey == packet.ControlRecover {
 				b.disabled = false
 				timeoutCounter = 0
-				go b.setTimer(timeoutCounter)
+				b.internalTimer <- timeoutCounter
 
 				b.startElection()
 			}
@@ -75,7 +81,7 @@ func (b *bully) mainLoop() {
 					b.startElection()
 				}
 			}
-			go b.setTimer(timeoutCounter)
+			b.internalTimer <- timeoutCounter
 		} else {
 			timeoutCounter++
 		}
@@ -109,11 +115,14 @@ func (b *bully) mainLoop() {
 	}
 }
 
-func (b *bully) setTimer(counter int) {
-	time.Sleep(b.timeout)
-	b.messageQueue <- packet.Message{
-		Id:       counter,
-		DemuxKey: packet.InternalTimerSignal,
+func (b *bully) startInternalTimer() {
+	for {
+		c := <-b.internalTimer
+		time.Sleep(b.timeout)
+		b.messageQueue <- packet.Message{
+			Id:       c,
+			DemuxKey: packet.InternalTimerSignal,
+		}
 	}
 }
 
