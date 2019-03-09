@@ -122,12 +122,7 @@ func (m Messagetype) String() string {
 
 // Print (non-atomically) prints a Message
 func (m Message) Print() {
-	fmt.Println()
-	fmt.Println("ID", m.Id, m.Src, "->", m.Dest)
-	fmt.Println(m.DemuxKey, m.Ok)
-	fmt.Println(m.Key, m.Timestamp)
-	fmt.Println(m.Value)
-	fmt.Println()
+	fmt.Println(m)
 }
 
 // MessagesEqual returns true iff two messages are identical (comparing keys

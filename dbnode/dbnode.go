@@ -297,6 +297,8 @@ func (n *Dbnode) handleRequests() {
 					Value:    msg.Value,
 					Ok:       false,
 				}
+			} else if msg.Id == n.currentTxid {
+				n.abortProcessing()
 			}
 		case <-n.stateQueryReq:
 			n.stateQueryRes <- n.currentTxid
