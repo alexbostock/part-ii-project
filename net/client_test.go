@@ -15,18 +15,17 @@ func TestDatabase(t *testing.T) {
 	timeout := 500 * time.Millisecond
 
 	nodes := make([]*dbnode.Dbnode, 6)
-	failedNodes := failed{nodes: make(map[int]bool)}
 
 	for i := 0; i < numNodes; i++ {
 		nodes[i] = dbnode.New(numNodes, i, timeout, false, quorumSize, quorumSize, false)
-		go startHelper(nodes[i].Outgoing, nodes, 0, 0, failedNodes)
+		go startHelper(nodes[i].Outgoing, nodes, 0, 0, nil)
 	}
 
 	nodes[numNodes] = &dbnode.Dbnode{
 		Incoming: make(chan packet.Message, 100),
 		Outgoing: make(chan packet.Message, 100),
 	}
-	go startHelper(nodes[numNodes].Outgoing, nodes, 0, 0, failedNodes)
+	go startHelper(nodes[numNodes].Outgoing, nodes, 0, 0, nil)
 
 	client := NewClient(nodes, timeout, 1)
 

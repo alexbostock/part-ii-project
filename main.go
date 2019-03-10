@@ -17,7 +17,7 @@ func main() {
 		flag.Float64("failuremean", 10, "average recovery time for a failed node in s"),
 		flag.Float64("failurevar", 5, "variance of node recovery time"),
 		flag.Uint("t", 100, "number of transactions"),
-		flag.Float64("w", 0.1, "proportion of transactions which are writes"),
+		flag.Float64("w", 0.05, "proportion of transactions which are writes"),
 		flag.Bool("persistent", false, "use persistent data stores on disk rather than in-memory stores"),
 		flag.Uint("vr", 3, "read quorum size"),
 		flag.Uint("vw", 3, "write quorum size, must satisfy vw > n/2"),

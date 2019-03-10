@@ -149,16 +149,18 @@ func (n *Dbnode) handleRequests() {
 					n.internalTimer <- timeoutCounter
 
 					n.requestRepeater.Recover()
+					n.elector.ProcessMsg(packet.Message{
+						DemuxKey: packet.ControlRecover,
+					})
 				}
 
 				continue
 			}
 
-			if msg.DemuxKey == packet.ControlFail {
+			if msg.DemuxKey == packet.ControlFail && !n.disabled {
 				n.disabled = true
 
 				n.requestRepeater.Fail()
-
 				n.elector.ProcessMsg(packet.Message{
 					DemuxKey: packet.ControlFail,
 				})
@@ -306,7 +308,7 @@ func (n *Dbnode) handleRequests() {
 					Value:    msg.Value,
 					Ok:       false,
 				}
-			} else if msg.Id == n.currentTxid {
+			} else if msg.Id == n.currentTxid && (msg.DemuxKey == packet.ClientReadRequest || msg.DemuxKey == packet.ClientWriteRequest) {
 				n.abortProcessing()
 			}
 		case <-n.stateQueryReq:
@@ -553,16 +555,18 @@ func (n *Dbnode) handleBackgroundWriteReq(msg packet.Message) {
 func (n *Dbnode) handleBackgroundWriteRes(msg packet.Message) {
 	n.backgroundWriteDaemon.response(msg)
 
-	currentVal, _ := n.Store.Get(msg.Key)
-	currentTimestamp, currentVal := decodeTimestampVal(currentVal)
+	if !msg.Ok {
+		currentVal, _ := n.Store.Get(msg.Key)
+		currentTimestamp, currentVal := decodeTimestampVal(currentVal)
 
-	if msg.Timestamp == currentTimestamp && !bytes.Equal(currentVal, msg.Value) {
-		log.Fatal("Inconsistent values with same timestamp", currentVal, msg.Value)
-	}
-	if msg.Timestamp > currentTimestamp {
-		value := encodeTimestampVal(msg.Timestamp, msg.Value)
-		txid := n.Store.Put(msg.Key, value)
-		n.Store.Commit(msg.Key, txid)
+		if msg.Timestamp == currentTimestamp && !bytes.Equal(currentVal, msg.Value) {
+			log.Fatal("Inconsistent values with same timestamp", currentVal, msg.Value)
+		}
+		if msg.Timestamp > currentTimestamp {
+			value := encodeTimestampVal(msg.Timestamp, msg.Value)
+			txid := n.Store.Put(msg.Key, value)
+			n.Store.Commit(msg.Key, txid)
+		}
 	}
 }
 

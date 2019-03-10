@@ -91,9 +91,9 @@ func (r *Repeater) send(msg packet.Message, demuxKey packet.Messagetype, unlimit
 			}
 
 			r.outgoing <- msg
-
-			r.lock.Unlock()
 		}
+
+		r.lock.Unlock()
 
 		if unlimited {
 			i--
