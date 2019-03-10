@@ -4,6 +4,7 @@ package dbnode
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"math/rand"
 	"path/filepath"
@@ -152,18 +153,31 @@ func (n *Dbnode) handleRequests() {
 					n.elector.ProcessMsg(packet.Message{
 						DemuxKey: packet.ControlRecover,
 					})
+
+					fmt.Printf("Node %v recovered\n", n.id)
 				}
 
 				continue
 			}
 
-			if msg.DemuxKey == packet.ControlFail && !n.disabled {
-				n.disabled = true
+			if msg.DemuxKey == packet.ControlFail {
+				if !n.disabled {
+					n.disabled = true
 
-				n.requestRepeater.Fail()
-				n.elector.ProcessMsg(packet.Message{
-					DemuxKey: packet.ControlFail,
-				})
+					n.requestRepeater.Fail()
+					n.elector.ProcessMsg(packet.Message{
+						DemuxKey: packet.ControlFail,
+					})
+
+					fmt.Printf("Node %v failed while in mode %v\n", n.id, n.currentMode)
+
+					if n.currentMode != coordinatingWrite {
+						n.currentMode = idle
+						n.currentTxid = -1
+
+						// TODO: delete uncommited*
+					}
+				}
 
 				continue
 			}
@@ -176,6 +190,8 @@ func (n *Dbnode) handleRequests() {
 				if msg.Id == timeoutCounter {
 					switch n.currentMode {
 					case coordinatingRead:
+						n.abortProcessing()
+					case coordinatingWrite:
 						n.abortProcessing()
 					case assemblingQuorum:
 						n.abortProcessing()
@@ -233,6 +249,7 @@ func (n *Dbnode) handleRequests() {
 			case packet.InternalTimerSignal:
 				// Do nothing (already dealt with above)
 			case packet.ElectionElect, packet.ElectionCoordinator, packet.ElectionAck:
+				timeoutCounter--
 				n.elector.ProcessMsg(msg)
 			default:
 				log.Fatal("Unexpected message type", msg)
