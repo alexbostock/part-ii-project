@@ -17,5 +17,5 @@ type Elector interface {
 
 // New creates a new Elector (currently using the bully algorithm).
 func New(id, n int, outgoing chan packet.Message) Elector {
-	return newBully(id, n, outgoing)
+	return newRing(id, n, outgoing)
 }

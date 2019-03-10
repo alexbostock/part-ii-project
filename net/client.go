@@ -95,7 +95,7 @@ func (c *Client) routeResponses() {
 
 // Get picks a random database node as coordinator, sends a ClientReadRequest
 // to that node, and either returns the response or returns an error response
-// when the request times out. The thirdreturn value ok is true iff the
+// when the request times out. The third return value ok is true iff the
 // request was successful. If ok, the first return value is the value returned
 // (which may be nil) and the second is the timestamp associated with the value.
 func (c *Client) Get(key []byte) ([]byte, uint64, bool) {
