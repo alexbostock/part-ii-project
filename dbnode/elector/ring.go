@@ -26,6 +26,8 @@ type ring struct {
 	disabled bool
 
 	internalTimer chan int
+
+	tokenSentLast time.Time
 }
 
 func newRing(id, n int, outgoing chan packet.Message) *ring {
@@ -70,7 +72,7 @@ func (r *ring) mainLoop() {
 
 	if r.id == r.n-1 {
 		r.token.Value = addId(r.token.Value, r.id)
-		r.outgoing <- r.token
+		r.forwardToken()
 	}
 
 	for msg := range r.messageQueue {
@@ -98,8 +100,7 @@ func (r *ring) mainLoop() {
 				}
 				r.token.Src = r.id
 				r.token.Dest = r.nextInRing
-				r.outgoing <- r.token
-
+				r.forwardToken()
 				r.nextInRing++
 				if r.nextInRing == r.n {
 					r.nextInRing = 0
@@ -125,7 +126,7 @@ func (r *ring) mainLoop() {
 
 			r.token.Src = r.id
 			r.token.Dest = r.nextInRing
-			r.outgoing <- r.token
+			r.forwardToken()
 
 			r.nextInRing = r.id + 1
 			if r.nextInRing == r.n {
@@ -146,7 +147,7 @@ func (r *ring) mainLoop() {
 func (r *ring) startInternalTimer() {
 	for {
 		c := <-r.internalTimer
-		time.Sleep(r.timeout)
+		time.Sleep(r.timeout / 5)
 		r.messageQueue <- packet.Message{
 			Id:       c,
 			DemuxKey: packet.InternalTimerSignal,
@@ -168,6 +169,13 @@ func (r *ring) forwardRequests() {
 			Timestamp: msg.Timestamp,
 			Ok:        msg.Ok,
 		}
+	}
+}
+
+func (r *ring) forwardToken() {
+	if time.Since(r.tokenSentLast) > r.timeout/5 {
+		r.outgoing <- r.token
+		r.tokenSentLast = time.Now()
 	}
 }
 
@@ -215,7 +223,7 @@ func addId(b []byte, id int) []byte {
 func removeId(b []byte, id int) []byte {
 	for i := 0; i < len(b); i += 3 {
 		if bytesAsId(b[i:i+3]) == id {
-			return append(b[:i], b[i+2:]...)
+			return append(b[:i], b[i+3:]...)
 		}
 	}
 
@@ -223,6 +231,10 @@ func removeId(b []byte, id int) []byte {
 }
 
 func highestId(b []byte) int {
+	if len(b)%3 > 0 {
+		log.Fatal("Invalid id ", b)
+	}
+
 	max := -1
 
 	for i := 0; i < len(b); i += 3 {

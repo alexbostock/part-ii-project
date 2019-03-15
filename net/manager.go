@@ -138,17 +138,6 @@ func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean floa
 func sendAfterDelay(msg packet.Message, link chan packet.Message, delay time.Duration) {
 	time.Sleep(delay)
 
-	if len(link) == cap(link) {
-		fmt.Println("Incoming link full", len(link), msg.Dest)
-
-		for len(link) > 0 {
-			msg := <-link
-			msg.Print()
-		}
-
-		log.Fatal("aaaah")
-	}
-
 	link <- msg
 }
 
