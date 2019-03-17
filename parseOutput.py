@@ -145,12 +145,12 @@ def div(x, y):
     else:
         return x / y
 
-print('Total time taken (milliseconds):', int(total_time_taken/1000))
+print('Total time taken (milliseconds):', round(total_time_taken/1000))
 print(total_reads, 'reads and', total_writes, 'writes processed')
-print('Average read response time (ms):', int(div(time_taken_reads/1000, total_reads)))
-print('Average write response time (ms):', int(div(time_taken_writes/1000, total_writes)))
-print(successful_reads, '(' + str(int(100*div(successful_reads, total_reads))) + '%) reads were successful')
-print(successful_writes, '(' + str(int(100*div(successful_writes, total_writes))) + '%) writes were successful')
+print('Average read response time (ms):', round(div(time_taken_reads/1000, total_reads)))
+print('Average write response time (ms):', round(div(time_taken_writes/1000, total_writes)))
+print(successful_reads, '(' + str(round(100*div(successful_reads, total_reads), 1)) + '%) reads were successful')
+print(successful_writes, '(' + str(round(100*div(successful_writes, total_writes), 1)) + '%) writes were successful')
 print(total_writes-successful_writes-failed_writes, 'writes have unknown response')
 
 print()
