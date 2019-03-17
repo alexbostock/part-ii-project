@@ -102,7 +102,7 @@ func (c *Client) Get(key []byte) ([]byte, uint64, bool) {
 	for i := 0; i < c.numAttempts; i++ {
 		id := <-c.idStream
 
-		resChan := make(chan packet.Message)
+		resChan := make(chan packet.Message, 1)
 		c.responseChans.Store(id, resChan)
 
 		timer := time.NewTimer(c.timeout)
@@ -140,7 +140,7 @@ func (c *Client) Put(key, val []byte) (resType PutResponse, timestamp uint64) {
 	for i := 0; i < c.numAttempts; i++ {
 		id := <-c.idStream
 
-		resChan := make(chan packet.Message)
+		resChan := make(chan packet.Message, 1)
 		c.responseChans.Store(id, resChan)
 
 		timer := time.NewTimer(c.timeout)
