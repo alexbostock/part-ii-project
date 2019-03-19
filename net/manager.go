@@ -166,13 +166,6 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 
 	// Wait for the last responses before halting)
 	time.Sleep(20 * timeout)
-
-	m.stop()
-
-	for _, node := range nodes {
-		fmt.Println()
-		fmt.Println(node)
-	}
 }
 
 func triggerNodeFailures(nodes []*dbnode.Dbnode, failRate, mean, variance float64, l *logger) {
