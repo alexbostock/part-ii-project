@@ -49,12 +49,13 @@ type Options struct {
 	WriteQuorumSize             *uint
 	NumAttempts                 *uint
 	SloppyQuorum                *bool
+	ConvergenceTest             *bool
 }
 
 // Simulate starts database nodes, sets up the simulated network, and sends
 // random client requests as tests, based on the given parameters.
 func Simulate(o Options) {
-	sloppyQuorum := *o.SloppyQuorum
+	sloppyQuorum := *o.SloppyQuorum || *o.ConvergenceTest
 
 	numNodes := *o.NumNodes
 
@@ -111,7 +112,11 @@ func Simulate(o Options) {
 		go triggerNodeFailures(nodes, *o.NodeFailureRate, *o.MeanFailTime, *o.FailTimeVariance, timer)
 	}
 
-	sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NumAttempts, monitor)
+	if *o.ConvergenceTest {
+		sendConvergenceTests(nodes, timeout, timer, *o.NumTransactions, monitor)
+	} else {
+		sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NumAttempts, monitor)
+	}
 
 	for _, node := range nodes {
 		if node.Store != nil {
@@ -165,6 +170,35 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 	}
 
 	// Wait for the last responses before halting)
+	time.Sleep(20 * timeout)
+}
+
+func sendConvergenceTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTests uint, m *monitor) {
+	client := NewClient(nodes, 10*timeout, 1)
+
+	var i uint
+	for i = 0; i < numTests; i++ {
+		key := make([]byte, 1)
+		rand.Read(key)
+
+		oldVal := make([]byte, 8)
+		rand.Read(oldVal)
+
+		newVal := make([]byte, 8)
+		rand.Read(newVal)
+
+		writeRequest(client, l, key, oldVal)
+		readRequest(client, l, key)
+		go writeRequest(client, l, key, newVal)
+
+		for j := 0; j < 249; j++ {
+			go readRequest(client, l, key)
+			time.Sleep(4 * time.Millisecond)
+		}
+
+		readRequest(client, l, key)
+	}
+
 	time.Sleep(20 * timeout)
 }
 

@@ -23,6 +23,7 @@ func main() {
 		flag.Uint("vw", 3, "write quorum size, must satisfy vw > n/2"),
 		flag.Uint("numattempts", 1, "maximum number of attempts per transaction from the client"),
 		flag.Bool("sloppy", false, "add background writes to provide eventually consistency in a sloppy quorum system"),
+		flag.Bool("convergence", false, "implies -sloppy=true; test time for eventual consistency to converge with strong consistency"),
 	}
 
 	flag.Parse()
