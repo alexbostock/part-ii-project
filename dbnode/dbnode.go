@@ -211,7 +211,9 @@ func (n *Dbnode) handleRequests() {
 
 			switch msg.DemuxKey {
 			case packet.ClientWriteRequest:
-				if n.elector.Leader() == n.id {
+				if n.writeQuorumSize == 1 {
+					n.processLocalWrite(msg)
+				} else if n.elector.Leader() == n.id {
 					n.lockRequests.enqueue(&msg)
 					go func() {
 						time.Sleep(n.lockTimeout)
@@ -221,11 +223,15 @@ func (n *Dbnode) handleRequests() {
 					n.elector.ForwardToLeader(msg)
 				}
 			case packet.ClientReadRequest, packet.NodeLockRequest, packet.NodeLockRequestNoTimeout:
-				n.lockRequests.enqueue(&msg)
-				go func() {
-					time.Sleep(n.lockTimeout)
-					timedOutLockRequests <- &msg
-				}()
+				if msg.DemuxKey == packet.ClientReadRequest && n.readQuorumSize == 1 {
+					n.processLocalRead(msg)
+				} else {
+					n.lockRequests.enqueue(&msg)
+					go func() {
+						time.Sleep(n.lockTimeout)
+						timedOutLockRequests <- &msg
+					}()
+				}
 			case packet.NodeLockResponse:
 				n.handleLockRes(msg)
 			case packet.NodeUnlockRequest:
@@ -361,6 +367,80 @@ func (n *Dbnode) cleanUnlockTxids() {
 		if id < threshold {
 			delete(n.unlockTxids, id)
 		}
+	}
+}
+
+func (n *Dbnode) processLocalRead(msg packet.Message) {
+	// If busy, just try again after a short wait
+	if len(n.uncommitedKey) > 0 {
+		n.Outgoing <- msg
+		return
+	}
+
+	val, err := n.Store.Get(msg.Key)
+
+	if err != nil {
+		n.Outgoing <- packet.Message{
+			Id:       msg.Id,
+			Src:      n.id,
+			Dest:     msg.Src,
+			DemuxKey: packet.ClientReadResponse,
+			Key:      msg.Key,
+			Ok:       false,
+		}
+	} else {
+		timestamp, val := decodeTimestampVal(val)
+
+		n.Outgoing <- packet.Message{
+			Id:        msg.Id,
+			Src:       n.id,
+			Dest:      msg.Src,
+			DemuxKey:  packet.ClientReadResponse,
+			Key:       msg.Key,
+			Value:     val,
+			Timestamp: timestamp,
+			Ok:        true,
+		}
+	}
+}
+
+func (n *Dbnode) processLocalWrite(msg packet.Message) {
+	// If busy, just try again after a short wait
+	if len(n.uncommitedKey) > 0 {
+		n.Outgoing <- msg
+		return
+	}
+
+	oldVal, err := n.Store.Get(msg.Key)
+	if err != nil {
+		n.Outgoing <- packet.Message{
+			Id:       msg.Id,
+			Src:      n.id,
+			Dest:     msg.Src,
+			DemuxKey: packet.ClientWriteResponse,
+			Key:      msg.Key,
+			Value:    msg.Value,
+			Ok:       false,
+		}
+		return
+	}
+
+	timestamp, _ := decodeTimestampVal(oldVal)
+	timestamp++
+	newVal := encodeTimestampVal(timestamp, msg.Value)
+
+	txid := n.Store.Put(msg.Key, newVal)
+	ok := n.Store.Commit(msg.Key, txid)
+
+	n.Outgoing <- packet.Message{
+		Id:        msg.Id,
+		Src:       n.id,
+		Dest:      msg.Src,
+		DemuxKey:  packet.ClientWriteResponse,
+		Key:       msg.Key,
+		Value:     msg.Value,
+		Timestamp: timestamp,
+		Ok:        ok,
 	}
 }
 

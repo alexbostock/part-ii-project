@@ -62,11 +62,11 @@ func Simulate(o Options) {
 	rqs := *o.ReadQuorumSize
 	wqs := *o.WriteQuorumSize
 
-	if rqs >= numNodes {
-		log.Fatal("Read quorum size must be smaller than the number of nodes.")
+	if rqs > numNodes {
+		log.Fatal("Read quorum size must not be greater than the number of nodes.")
 	}
-	if wqs >= numNodes {
-		log.Fatal("Write quorum size must be smaller than the number of nodes.")
+	if wqs > numNodes {
+		log.Fatal("Write quorum size must not be greater than the number of nodes.")
 	}
 	if wqs <= numNodes/2 {
 		log.Fatal("Write quorum size must greater than half the number of nodes.")
