@@ -101,52 +101,87 @@ extent for a comparable purpose.
 
 % TODO: Make it clear in the first paragraph what your project is about \& how well you’ve done it
 
-- Why distributed databases? \cite{bacon2003operating}
+\section{The Need for Distributed Databases}
 
-With a single database server, we have an availability problem (no transactions when the server fails or cannot be reached) and a consistency problem (data loss if the server is destroyed). Use a distributed system with many database nodes to reduce the risk of a total failure, but this means consistency is more difficult to achieve.
+Web apps are big business. For example, Facebook has over 1.5 billion daily active users \cite{facebook}. There are $86,400$ seconds in a day, so the peak number of users active within a second must be at least $1,500,000,000/86,400 > 17,000$.
+Big web apps like this need big databases.
 
-- CAP theorem \cite{brewer} \cite{gilbert}
+% TODO: tidy up first paragraph, and mention Facebook's value
 
-Brewer proposed a system can have at most 2 of consistency, availability, partition-tolerance \cite{brewer}. Informal definitions. Partition-tolerance means that a system continues to work in the presence of network partitions. Consistency means guarantees about clients' reads and writes. Availability means ability to execute transactions.
-
-Using particular strict definitions, \cite{gilbert} proved the CAP theorem. This assumes consistency is strong consistency (linearisability) and availability means the database can complete transactions whenever at least one node is alive. Very few real world applications have either consistency or availability by these definitions.
-
-This doesn't consider different types of consistency, especially eventual consistency and other models from \cite{terry2013}. Also, consider availability as non-boolean. Instead, consider availability to mean DQ (harvest and yield). In addition, note that we can't choose not to have partition-tolerance in an Internet-scale application. \cite{hale_2010}
-
-Even with availability, latency is also important. Instead of CAP, PACELC: in the presence of partitions, trade-off of consistency and availability, else trade-off of latency and consistency. \cite{abadi2012consistency}
-
-My project explores what availability and latency can be achieved while providing different consistency guarantees.
-
-- Use case: social network
-
-Interested in databases for large web applications such as social networks. Key points:
+Rather than a centralised database, we want a distributed one, which has several advantages \cite{lake2013}:
 
 \begin{itemize}
 \item
-Mostly reads (95\%) \cite{nunemaker}
+Centralised databases have a single point of failure; with a database running on a single machine, the database is unavailable if that machine fails. Even supposing we have a very reliable machine, we still have to have some downtime to upgrade that machine's OS. Distributed databases systems can be made to remain available after several individual nodes have failed \cite{bacon2003operating}.
 
 \item
-Availability is important (for revenue) (https://developers.google.com/web/fundamentals/performance/why-performance-matters/)
+Centralised databases are entirely dependant on a single machine's network connection. We don't want a local network failure causing the entire database to become unavailable. This is another single point of failure, independent of the actual machine.
 
 \item
-Consistency is important, but not critical. Don't need to make a tweet visible everywhere immediately, but do want to optimise convergence time. Serving something is more important than serving the most recent data (but both is nice).
+In the case of media failure on the database machine, we will probably lose data. With distributed systems, we can keep multiple redundant copies of the same data, so data loss is much less likely.
+
+\item
+Distributed systems are easier and cheaper to scale. Centralised systems can only be scaled vertically: by buying more powerful hardware. Beyond a point, the cost of more powerful hardware is unreasonable. Distributed systems can be scaled horizontal: by adding more machines. Many weaker machines are cheaper than a single supercomputer.
+
+\item
+Distributed systems may be able to provide lower latency. If users are distributed around the world, a request may be served with lower latency by querying a local data centre. This is not possible with a centralised system (mean Sa\~o Paulo to Singapore RTT is 362.8ms, only 22.5ms California to Oregon \cite{bailis2013highly}).
+
+\end{itemize}
+
+\section{Consistency and Availability Trade-Offs}
+
+Distributed databases have a trade-off of consistency against availability. This was proposed as the CAP theorem, which says a system cannot have all 3 of consistency, availability and partition tolerance \cite{brewer}. The exact definitions of consistency and availability were not precisely defined.
+
+A partition tolerant system is one which continues to function correctly when the network is not connected. In a partition scenario, all nodes in the network are split into 2 or more disjoint sets; each node can send messages to other nodes in the same set, but not to those in other sets (on the other side of a partition). Given the decentralised nature of the Internet, most web applications require partition tolerance \cite{hale_2010}. % TODO: make sure Spanner is mentioned somewhere
+
+One definition of consistency, also known as strong consistency, is linearisability. This means that all transactions are serialisable and, if some transaction $x$ happens before another transaction $y$, then $y$ sees all effects of $x$. Serialisability means that each transaction appears to be executed instantaneously so, at any particular point in time, every transaction's effects can either be completely seen, or not seen at all \cite{herlihy1990linearizability}.
+
+The strictest definition of availability says, as long as at least one database node is reachable by a caller, database transactions can be completed. The CAP theorem has been proven, based on this definition of availability and consistency defined as linearisability (strong consistency) \cite{gilbert}.
+
+There are many other types of consistency, most notably eventual consistency. An eventually consistent system may not appear consistent but, after some indefinite period of time without updates, will converge to a strongly consistent state. This can be combined with a variety of additional guarantees, each useful for different applications \cite{vogels_2008}.
+
+In practice, no real world system has perfect availability, as defined in the CAP theorem proof. Instead, we want to measure availability. A useful metric is yield: the proportion of transactions which are successful \cite{fox1999harvest}. Ideally, a system should provide yield very close to $100\%$.
+
+Although availability is helpful, it isn't the only useful metric. We also need to consider latency. A system could have perfect availability but sometimes take hours to respond to a request, which is not useful in many applications. An alternative to the CAP theorem has been proposed: PACELC. This says that, in the presence of partitions, there is a trade-off of availability against consistency; otherwise, there is a trade-off of latency against consistency \cite{abadi2012consistency}.
+
+\section{Databases for Social Networking Services}
+
+My project explores what availability and latency can be achieved while providing different consistency guarantees, particularly considering the requirements of large-scale social networking services. Applications like this have several important characteristics.
+
+\begin{itemize}
+\item
+Databases need to process high volumes of ``read-mostly'' database transactions \cite{fox1999harvest} \cite{nunemaker}.
+
+\item
+Availability is important, since better service means more revenue, especially with business models based on advertising. Latency is also important, for similar reasons (``for every additional second a page takes to load, 10 per cent of users leave'' \cite{clark_2018}).
+
+\item
+Different services within the application require different consistency guarantees. For example, when serving a news feed to a user, high availability is much more important than strong consistency, but consistency may be much more important when determining whether a particular user has permission to see a post.
 
 \end{itemize}
 
 \chapter{Preparation}
 % 26% (with intro)
 
-%From design doc, with what has changed since then:
+% TODO: Compare to other systems (Chubby \cite{27897}, Spanner \cite{45855}, BigTable \cite{chang2008bigtable}, Dynamo \cite{decandia2007dynamo}, etc.)
 
-%- Public interface, specific consistency guarantees (session guarantees)
+\section{Overview}
 
-%  - Semantics of no value stored / no value found / no response
+% TODO
 
-%  - Semantics of overwriting old values, alternatives (larger atomic transactions), usefulness to applications
+\section{Tools Used}
+
+% TODO
+
+\section{Starting Point}
+
+% TODO
 
 \section{Public Interface}
 
-I built a distributed database system which provides several different consistency guarantees. This system is a key-value store, storing values indexed by keys. The client interface provides 2 methods:
+Previously, nearly all database systems were relational database \cite{lake2013}. These were characterised by reasonably complex data models, allowing complex structured queries with SQL, and minimising the amount of redundant data stored. More recently, this different systems have become more popular, preferring simpler data models so that systems are more scalable \cite{bailis2013highly}.
+
+Given this, I built a distributed key-value store. This has a very simple data structure: each record is composed of a key and a value. The store is indexed by keys, and there can be at most one record present with any particular key. Essentially, the database is a persistent, distributed hash table. The public interface has 2 methods:
 
 \begin{itemize}
 \item
@@ -157,37 +192,62 @@ I built a distributed database system which provides several different consisten
 
 \end{itemize}
 
-A put request has 3 possible response values: success (and a timestamp), failure and unknown. This reflects a limitation of distributed systems: there is no guarantee that a response will be received.
+The put method has at-most-once semantics. A transaction may or may not be completed, but will not be executed more than once. If a client receives no response to a request, there is no way of knowing whether or not the transaction was completed; the node coordinating the transaction may have failed before executed the transaction, or have failed immediately after executing it, but before replying. This limitation is reflected in the set of put response values: success, failure and unknown.
 
-If no response is received, there is no way to determine whether or not the transaction was completed. This case is represented by the unknown response value. Each request has at-most-once semantics; wherever possible, the return value indicates whether or not a transaction was completed.
+The get method is idempotent: it never modifies the data store. The only goal of a get is to return a value to the client. If no response is received, the transaction failed from the client's point of view. This means get has only two response values: success and failure.
 
-Calls to get are idempotent: they do not modify any data. The only goal of a get is to return a value to the client. If no response is received, this was failed, so this case is identical to receiving an error response from the client's point of view. Note that get may return a null value, indicating that no value is stored associated with the given key. Importantly, a null response (value not present) is different from an error response (transaction failed).
+Note that a successful get request may return a null value, indicating that the requested key is not present in the database. Importantly, the null response (value not present) is different from the failure response (value not found).
 
 All keys and values can be byte arrays of any size. The database does not inspect their values, so the type and structure of data stored is irrelevant.
 
 Put requests do not read any current value stored, except for timestamps. This means the system cannot be reliably used for larger atomic operations (without using some external locking system). % TODO: implement and change here
 
-\section{Remote Procedure Calls}
+% TODO: Semantics of overwriting old values, alternatives (larger atomic transactions), usefulness to applications
 
-% Copies from design document
-% TODO: cut this down
+\section{Consistency Guarantees}
 
-For distributed systems, in general, clients making requests are not directly connected;
- they can only communicate using an unreliable network. Given this limitation, some syst
-em is needed to encapsulate procedure calls. Such systems are often based on hypertext t
-ransfer protocol (HTTP), due to its wide usage on the Internet.
+\subsection*{Strong Consistency}
 
-One method is representational state transfer (REST), which is based on the concept of r
-esources. The URL should contain the name of a resource, and the type of operation shoul
-d be indicated by the HTTP verb (GET, POST, PUT etc.) used. This works well with create, read, update and delete (CRUD) operations which are meaningful in database systems.
+The strongest consistency guarantee is strong consistency, which is defined as linearisability. Each transaction takes has a non-zero latency, so can be associated with 2 timestamps: a start time and end time. The system should appear as if every transaction occurs instantaneously at a unique timestamp, and that timestamp is between the transaction's start and end times \cite{herlihy1990linearizability}.
 
-One drawback of REST is its inefficiency. Suppose we have 4 types of operations. The information conveyed by specifying the type of operation is 2 bits. The HTTP verb GET uses 3 bytes, so is a very inefficient encoding.
+Note that there is no universal concept of time \cite{bacon2003operating}, but guarantees based on universal time are useful. If a single client completes several transactions sequentially, they should appear to be executed sequentially. In a more complicated scenario, we may have one client $x$ which completes a transaction, then sends a message to another client $y$. Having received the message, $y$ then completes a transaction. With a global concept of time, since the message cannot be received before it is send, we may want to ensure that $y$'s transaction does appear to be executed after $x$'s.
 
-Instead, we can use an RPC library which is not based on text encoding. RPC libraries can also provide significant abstractions, so that RPC calls are very similar to normal function calls, from the client's point of view. For example, Java's remote method invocation system provides an abstraction over serialising and deserialising Java objects, and providing distributed garbage collection.
+Strong consistency is sufficient for any application, but is not necessary for every application. Since the CAP theorem shows that a strongly consistent, partition-tolerant system must sacrifice availability \cite{gilbert}, we need to consider weaker consistency guarantees which may still be useful for some applications.
 
-For this project, I will not use any RPC solution which would be used in a real deployment. Since I am going to run the whole system on a single machine, I can use a much simpler mechanism. HTTP (using transmission control protocol, TCP) provides support for (mostly) reliable communication over unreliable networks, using checksums and re-transmission. On a single machine, I will have a reliable simulated network, so TCP is unnecessary, and would add additional complexity and latency to the system.
+\subsection*{Eventual Consistency}
 
-In order to evaluate my system, I need to be able to add variable latency and packet loss to simulate different network conditions. By minimising the latency of my RPC service, there will be minimal noise affecting my measurements.
+An eventually consistent system does not provide strong consistency. If a write then a read are executed sequentially, there is no guarantee that the read will return the value just written. What eventual consistency does guarantee is, after some indefinite amount of time passes without any updates to the datastore, the system will reach a strongly consistent state \cite{vogels_2008}. Note that the time required to reach consistency is not defined.
+
+Eventual consistency is useful for some applications. For example, when a user creates a social media post, it is not essential that the post is immediately visible to users everywhere in the world. after some time, the post should be visible everywhere. Also note that reaching that state in a very short time is desirable but not essential. It may be the case that a 1 second delay before a post is completely available is acceptable if the database throughput can be increased by a factor of 10, for example.
+
+\subsection*{Session Guarantees}
+
+While strong consistency is not required for all applications, many applications require stronger guarantees than eventual consistency. One type of guarantee which can be provided is a session guarantee.
+
+``A session is an abstraction for the sequence of read and write operations performed during the execution of an application.'' \cite{terry1994} A client can request additional guarantees which are valid within the scope of a session. Different guarantees can be useful for different applications.
+
+\begin{description}
+\item{Monotonic Reads} means that each read within a session is at least as up-to-date as the previous one. If there are two sequential reads, the second one will always return the same value as the first, or return a more recent value. This guarantee can prevent oscillating behaviour from a client's point of view. For example, once a social media user has seen a post, that user will always be able to see that post unless the post is subsequently deleted (as long as the service is available).
+
+\item{Monotonic Writes} means that writes within a session are applied sequentially, in the correct order. Suppose a social media post is edited several times, with each edit replacing the previous version of the post. With monotonic writes, the most recent version is guaranteed to be the version which persists in the end.
+
+\item{Read Your Writes} (also known as Read My Writes) means that each read within a session see the effects of all previous writes in the same session. This may be useful for an authentication system; if a user changes their password then tries to sign in with the new password, an eventually consistent system may reject the password. With the Read Your Writes guarantee, this scenario would not occur.
+
+\end{description}
+
+\subsection*{Other Guarantees}
+
+Other guarantees can be provided independently of sessions \cite{terry2013}.
+
+\begin{description}
+\item{Consistent Prefix} means that every read sees the effects of an ordered sequence of writes beginning with the first write. The length of the sequence is not defined. This means that each read returns a snapshot of a previous state of the database. % TODO: an example
+
+\item{Bounded staleness} means that the value returned by a return is either the most recent value, or was the recently value at some point in a defined time frame. Where eventual consistency does not define the time to reach a consistent state, bounded staleness might guarantee that the system will reach a consistent state (if it is available) in at most 1 hour, for example. Suppose a social networking service needs to delete a video for legal reasons; with bounded staleness, the system could guarantee that the video was completely removed within 5 minutes of the transaction. While strongly consistent may be more suitable, a bounded delay may be acceptable to avoid the associated performance costs.
+
+\item{}
+Any of the session guarantees listed above can also be provided independently of sessions, effectively defining a global session which includes all transactions.
+
+\end{description}
 
 \section{Quorum Assembly}
 
@@ -199,231 +259,103 @@ $$V_W > n / 2$$
 
 $$V_R + V_W > n$$
 
-$V_W$ is the number of nodes required for a write transaction. The first condition means that every write sees every other write: each write involves more than $n/2$ nodes chosen fromt he same set of $n$, so there must be at least 1 node involved in both transactions. This ensures that every write to a particular key will have a unique timestamp, so there is a unique ordering of write transactions.
+$V_W$ is the number of nodes required for a write transaction. The first condition means that every write sees every other write: each write involves more than $n/2$ nodes chosen from the same set of $n$, so there must be at least 1 node involved in both transactions. This ensures that every write to a particular key will have a unique timestamp, so there is a unique ordering of write transactions.
 
 The first condition also means that, once a write has been committed, there are at more than $n/2$ copies of the value written, so no data will be lost in the event of total failure of any $n/2$ database nodes.
 
-$V_R$ is the number of nodes required for a read transaction. The second condition means that every read sees every write. Since conflicting values for the same key must have unique timestamps, every read will always return the most recent value, satisfying the conditions for strong consistency. % TODO: make sure strong consistency is defined before this point
+$V_R$ is the number of nodes required for a read transaction. The second condition means that every read sees every write. Since conflicting values for the same key must have unique timestamps, every read will always return the most recent value, satisfying the conditions for strong consistency.
 
 \section{Sloppy Quorum}
 
 If strong consistency is not required, we can use a quorum system with more relaxed constraints. We can achieve different performance and different consistency guarantees by imposing different constraints. Consider removing each from a strict quorum system.
 
-\begin{tabular}{| p{0.4\linewidth} | p{0.5\linewidth} |}
+With both $V_W > n/2$ and $V_R + V_W > n$, the system is strongly consistent, as described in the previous section.
+
+With only $V_W > n/2$, the system guarantees monotonic writes (globally rather than within a session). This means that there is a total ordering on write transactions. By removing the constraint on $V_R$, any particular read is not guaranteed to see any particular write. If every write eventually reaches at least $n - V_W + 1$ nodes, the system is eventually consistent. This can be implemented easily; after a write transaction is atomically committed to $V_W$ replicas, it can be lazily propagated to other nodes. Given the total ordering on writes, every write can have a unique timestamp, so the system can easily avoid overwriting newer values with older ones, so each replica becomes monotonically more up-to-date over time.
+
+With only $V_R + V_W > n$, the system is optimised for write operations. This may be useful for storing debug logs; writing to logs can be a frequent operation, without a big performance cost to the application. If logs are read infrequently, high latency and poor availability for reads is acceptable. Also note that, since $V_W$ can take any value, the likelihood of data loss due to individual node failures is increased. In the most extreme case, $V_W = 1$, so data loss may occur if a single node suffers media failure. This may be acceptable for debug logs, but most applications need better durability.
+
+With no constraints on $V_R$ and $V_W$, the system provides very few guarantees. Writes can occur concurrently, so the quorum system cannot provide a total ordering of writes. Although it guarantees no consistency, an unconstrained quorum system can provide the best availability. In the most extreme case, $V_R = V_W = 1$, so the system is available as long as a single node is reachable.
+
+% TODO: mention Dynamo
+
+With variations on the basic quorum system, we can build systems with many diffferent consistency guarantees.
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{| p{0.25\linewidth} | p{0.6\linewidth} |}
 \hline
-$V_W > n / 2$ and $V_R + V_W > n$ & Strong consistency.\\
+Strong Consistency & $V_R + V_W > n$ and $V_W > n/2$\\
 \hline
-Only $V_W > n / 2$ & Monotonic writes, may read stale values, can be made eventually consistent.\\
+Eventual Consistency & Background write propagation\\
 \hline
-Only $V_R + V_W > n$ & Write conflicts, optimised for writes.\\
+Monotonic Reads & Always read from the same node\\
 \hline
-No constraints & Write conflicts, may read stale values, but (I expect) best availability.\\
+Monotonic Writes & Always write to the same node (with original node coordinating write), or $V_W > n$ (enforcing globally rather than session)\\
+\hline
+Read Your Writes & Both monotonic reads and monotonic writes\\
+\hline
+Consistent Prefix & $V_W > n/2$\\
+\hline
+Bounded Staleness & Probabilistically from convergence time, or add a mechanism to restrict availability based on time since last contacted each other node.\\
 \hline
 \end{tabular}
+\end{table}
 
-I implemented the first 2. % TODO: implement more and add that here
+% TODO: make this better
+I implemented a strict quorum system as a control. I also implemented a system with the constraint $V_W > n/2$, which provides a useful set of consistency guarantees.
 
-- Example uses for each of the above
+I implemented two systems. The first uses strict quorum to provide strong consistency.
+
+The second uses sloppy quorum, enforcing $V_W > n/2$ only, providing consistent prefix and monotonic writes, and uses a background write propagation mechanism to provide eventual consistency. In addition, monotonic reads can be achieved within a session by sending all read requests to the same node. A read in the sloppy quorum system could read from more than $V_R$ nodes, so a client could choose between strongly consistent reads and eventually consistent ones.
 
 \section{Concurrent Writes}
 
-As with the strongly consistent variant, my eventually consistent design does not allow concurrent write transactions. This is enforced with the constraint $V_W > n / 2$. In order to further increase throughput, we could allow concurrent writes, but this would reduce the consistency guarantee.
+Both of the systems I implemented have the constraint $V_W > n/2$. This prevents 2 write operations from executing concurrently, which enforces a total ordering on all write operations. This provides linearisability, ensuring each write appears to be executed instantaneously at a unique timestamp. The cost of this is in availability and latency: every write transaction needs to reach a majority of replicas.
 
-With eventually consistency, we want the last write to persist. This means that we need to impose a total ordering on write operations. With my design, it is guaranteed that two values for the same key with the same Lamport timestamp will be the same. By allowing concurrent writes, this would not be the case. There are several solutions to this:
+In a system without this constraint, writes may occur concurrently. This means that there may be several different values stored with the same key and the same timestamp. There are several different ways to deal with this.
 
-\begin{itemize}
-\item
-Use UTC timestamps rather than logical clocks. While this solution may be acceptable for some applications, it does not work in general. An important limitation of distributed systems is that there is no common clock across the whole system. Network time protocol (NTP) allows synchronisation of clocks across to within some error margin (depending on network conditions), but this would not help to order two transaction which happened within the error margin, so is not useful as a general solution.
+A system could use some deterministic method of breaking ties. For example, with every database node having a unique ID, always take choose the value from the node with the highest ID. This is deterministic across the system, and provides serialisability. This means that there is a total ordering on writes, but this is not always related to the actual order of writes. For an application, this creates a race condition; any time there are too processes concurrently writing to the same value, the value which persists is not defined.
 
-\item
-Store multiple values for the same key where conflicts occur. This solution is effectively passing the problem to application developers instead. At the cost of storing multiple values for the same key, we can provide the client with conflicting values and their timestamps. With this solution, Lamport timestamps are not very useful, since they do not show causality between concurrent events.
+A more useful tie break might be based on the client's ID. For example, a social media post may be editable only by the user which created it, or a moderator. A database could always prefer writes by a moderator. This is deterministic, and simple and helpful to an application developer.
 
-To improve on Lamport clocks, vector clocks can be used. Vector clocks contain a Lamport timestamp for each node in the system. They show exactly which previous transactions may have affected a transaction, across the whole system. For example, a client may know which node handled a previous transaction, and vector clocks would make it clear which of several conflicting values would be consistent with that previous transaction, at the application level.
+In order to provide linearisability without locking, a system needs to use synchronised clocks. Using GPS clocks and very low latency networking within a data centre, clocks in a distributed system can be synchronised within a very small margin. Using this, every transaction can have a precise UTC timestamp, with small, known error margins. This technique is used by Google's Spanner \cite{45855}. This also has the benefit of allowing consistent snapshots. Without locking an entire database, it is possible to query the state of the whole system at a particular time in the past.
 
-I may explore this method as an extension.
-
-\end{itemize}
-
-- Variations to implement different consistency guarantees from \cite{terry2013}
-
-% Other Terry paper
-
-- Compare to other systems (Chubby \cite{27897}, Spanner, BigTable, Dynamo, etc.)
-
-\section*{System Limitations}
+\section{System Limitations}
 
 My design has a number of important limitations, which are summarised here.
 
 \begin{itemize}
 \item
-The set of database nodes is fixed. Additional nodes cannot be added to the system, and existing ones cannot be removed. In practice, the ability to change the set of nodes is useful for scaling a system while it is running, but doing so adds more complexity. Quorum assembly relies on the values $V_R$ and $V_W$, and their constraints which depend on the number of nodes $n$, so the number of nodes cannot be changed dynamically.
+The set of database nodes is fixed. Additional nodes cannot be added to the system, and existing ones cannot be removed. In practice, the ability to change the set of nodes is useful for incrementally scaling a system. Amazon's Dynamo achieves this by storing each value on a subset of the replicas in a cluster, using consistent hashing to limit the number of values which need to be relocated each time the number of replicas changes \cite{decandia2007dynamo}. Incremental scaling is outside the scope of my project.
 
 \item
+% TODO: Rewrite this
 Nodes cannot fail permanently. In 2PC, if a node fails, we need to wait for that node to become available again before allowing further writes, to ensure that the system remains consistent.
 
-\item
-The system may not remain consistent if, during a 2PC transaction, both the coordinator and another node in the quorum fail.
+Mitigation: just require manual intervention. With fine-grained locking, most of the database can remain available throughout.
+
+A small number of keys having to be manually un-jammed is not a huge problem, assuming they fail independently. See application decomposition in \cite{fox1999harvest}.
+
+% TODO: Justify not just adding a timeout \cite{imbriaco_2012}
 
 \item
+% TODO: Rewrite this
 If any database node's persistent store is irreversibly corrupted on failure, then consistency guarantees may be violated.
+% TODO: justify based on RAID, Reed-Solomon
 
 \end{itemize}
-
-  - Justify whether limitations are reasonable in the real world \cite{imbriaco_2012}
-
-  %- Justify these based on RAID, Reed-Solomon
 
 \chapter{Implementation}
 % 40%
 
-\section{Quorum Assembly}
-
-The main method for ensuring consistency in my system is quorum assembly. For a strongly consistent system, strict quorum assembly is needed. For eventual consistency, this will be modified to use a sloppy quorum method.
-
-Given a system of $n$ nodes, we first have to define two values $V_R$ and $V_W$, which are the sizes of read and write quorums, respectively. At least $V_R$ nodes must be involved in every read transaction, and at least $V_W$ nodes must be involved in every write. In a strict quorum system, we also enforce the following constraints:
-
-$$V_W > n / 2$$
-
-$$V_R + V_W > n$$
-
-The first constraint means that every value written to the database must be written to a majority of database nodes. The second constraint means that, for any read quorum, at least one node in the quorum will have the most recent version of each value stored. Where multiple conflicting values exist for the same key, we need Lamport timestamps to identify the most recent value.
-
-Lamport timestamps are monotonically increasing integers, which indicate the order in which some events occur. If some event $A$'s timestamp is smaller than another event $B$'s, then $A$ happened before $B$.
-
-In my system, each node stores a Lamport timestamp for each database key. Where different nodes have conflicting values for the same key, the one with the greater clock value is most recent.
-
-In order to ensure Lamport clock values do not overflow, and thus to ensure they are monotonically increasing, my system will use 64 bit unsigned integers for Lamport clocks. A clock value is incremented each time the associated key-value pair is overwritten. Assuming a high throughput, with 1 transaction every 10 milliseconds writing to the same key, the time before the Lamport clock overflows will be $2^{64} \times 10 \cdot 10^{-3} = 1.84 \cdot 10^{16} \text{seconds}$. This is more than 5 billion years, so 64 bit timestamps should be adequate.
-
-Building on the basic data store interface, Lamport clock values will be stored as part of the value. At the lower level, each value is actually the concatenation of a Lamport timestamp and the data being stored. In the case when a value is deleted, the concatenation of a timestamp and an empty byte array will be stored. This indicates that a value has been deleted from this node, which will be necessary for reads (for example, when a read quorum contains some nodes on which a value has been deleted, and some which still have a stale value), but does not violate the requirement of not storing null values in the low-level store.
-
-The procedure for a read transaction is:
-
-\begin{itemize}
-  \item
-  A node receives a read request from the client. This node shall be the coordinator.
-
-  \item
-  Assemble a quorum of at least $V_R$ nodes, and obtain a lock on each node in the quorum.
-
-  \item
-  The coordinator queries each node in the quorum with the given key.
-
-  \item
-  Each node returns the value it has stored, and the Lamport clock associated with the key, or says it has no value stored for the key.
-
-  \item
-  The coordinator identifies the value with the highest Lamport timestamp, and returns that value as the result.
-
-  \item
-  The coordinator releases all locks.
-
-\end{itemize}
-
-Note that this may reach a deadlock condition. Suppose there are multiple concurrent transactions, concurrently acquiring locks on nodes. This may reach a condition where every node is locked, but no coordinator has assembled a complete quorum. If latency was not an issue, we could avoid this by always acquiring locks in the same order, ordered by node IDs. This would require $O(V_W)$ RTTs. Since $V_W > n / 2$, this would add significant latency with a large number of nodes (eg. $RTT = 20$ ms, $V_W = 500$ means acquiring locks would take $2$ seconds). Note that on average half of the nodes involved are unavailable throughout those 2 seconds, so this would have a significant effect on availability.
-
-There will also be a problem if the coordinator fails before it releases locks. This would leave nodes permanently locked, and effectively useless.
-
-To fix both of these problems, each node should set a timer when its lock is acquired, and reset that timer each time it responds to a request from the coordinator. If the timer runs out, it should release its lock. If it subsequently receives a request from the coordinator, it should return an error. The coordinator, if it receives an error, should abort and retry the transaction.
-
-Note that, since every node in a read quorum is locked, and given the constraint $V_R + V_W > n$, there cannot be concurrent read and write transactions. This imposes a happens-before relationship between each read transaction and every write transaction, so ensures that the value read is consistent. There may be concurrent read transactions; this has no effect on consistency, and will allow greater throughput.
-
-The procedure for write transactions is similar to that for reads, but requires additional work to ensure atomicity. When a value is written, it must be either written to a full write quorum, or not written at all. This is achieved using an atomic commit protocol, 2 phase commit (2PC).
-
-The write procedure is:
-
-\begin{itemize}
-  \item
-  A node receives a write request from the client. This node shall be the coordinator.
-
-  \item
-  Assemble a quorum of at least $V_W$ nodes, and obtain a lock on each node in the quorum.
-
-  \item
-  The coordinator queries the existing value for the required key from each node in the quorum. Note that this is essentially a read transaction before a write transaction, which is why strict quorum is sometimes describe as ``read your own writes''
-
-  \item
-  Each node returns the value it has stored for the given key, and the Lamport clock associated with that key.
-
-  \item
-  The coordinator identifies the most recent timestamp associated with the key. Note that, given the constraint $V_W > n / 2$, this must be the most recent write for the key. The coordinator increments the greatest timestamp to get the timestamp for the new write.
-
-  \item
-  The coordinator initiates 2PC with all the nodes in the quorum, to write the new value and the new Lamport timestamp.
-
-  \item
-  The coordinator releases all locks.
-
-\end{itemize}
-
-The same deadlock condition as with read transactions applies here, so we will use the same timer system for pre-emption.
-
-\section{Two-Phase Commit (2PC)}
-
-In 2PC, the coordinator begins by sending the transaction to each node in the quorum, as well as sending a list of nodes involved in the transaction.
-
-Each node should then execute the transaction, writing the new value to persistent storage but not yet committing. It should save a new vector clock value with the new value, which is the merge of its existing vector for the key, and the vector clock from the coordinator. It should then respond to the coordinator with a yes vote, and a copy of its new vector clock for the key. In case of any failure, it should respond with a no vote, and can cancel the transaction.
-
-If the coordinator receives a yes vote from every node, it should:
-
-\begin{itemize}
-  \item
-  Send a commit message to each node.
-
-  \item
-  Wait for an acknowledgement from each node.
-
-  \item
-  When it receives an acknowledgement from every node, commit the transaction to its own disk.
-
-\end{itemize}
-
-In the case that the coordinator does not receive an acknowledgement from every node, it should repeatedly send commit messages until it does so. This is one drawback of 2PC: it is a blocking protocol. Until all nodes involved have acknowledged, a write transaction cannot be completed. Note that all nodes involved are locked throughout this time; given that concurrent writes are not allowed, this will affect the availability of the system, but it does provide consistency.
-
-If the coordinator doesn't receive a yes vote from every node (either at least one no vote, or a response times out), it should send a rollback message to all nodes.
-
-In case of the coordinator failing, all other nodes in the transaction will timeout. In this case, since they all know the identifiers of all nodes involved in the transaction, the node with the lowest identifier becomes a new coordinator. The new coordinator queries all other nodes for their votes. In case any node voted no, it should be aborted. Otherwise, the transaction can be completed. When the coordinator recovers, it can determine from the other nodes whether or not the transaction was committed.
-
-2PC is tolerant of most failure scenarios.
-
-\begin{itemize}
-  \item
-  In the case of a node (or several nodes) other than the coordinator failing before sending a yes vote, the coordinator will abort the transaction.
-
-  \item
-  In the case of a node other than the coordinator failing after sending a yes vote, the failed transaction will be stored persistently on that node, so the node will be able to recover.
-
-  \item
-  In the case of the coordinator failing, all other nodes involved in the transaction can communicate to decide whether or not to abort. The transaction will be stored persistently on the coordinator node, so the coordinator can recover in the same way as any other node failing after voting yes.
-
-\end{itemize}
-
-A limitation of this is that it is not tolerant of data loss on failure, for example due to disk failure. This is a limitation of my system. In the real world, each node could store data on multiple disks in a RAID array, making the chance of data loss negligible. In case of total loss of database nodes, data could still be recovered provided at least half of the database nodes are unaffected, although at the cost of availability.
-
-Another issue is the case of simultaneous failure of both the coordinator and another node. In this case, the remaining nodes could try to recover, but could not know whether the second failed node voted yes or no. This is a limitation of my system. As an extension, I may modify the system to use three-phase commit (3PC), which addresses this problem.
-
-\section{Sloppy Quorum}
-
-Sloppy quorum is a modification to the strict quorum system, which does not provide strong consistency guarantees. The procedure for transactions is the same as before, but we remove the constraint $V_R + V_W > n$.
-
-This means that a read transaction may not return the most recent value for the requested key; it may return a stale value. The benefit is that more read transactions can occur concurrently, which will allow a greater throughput of transactions, and the system can remain available for read after a larger number of node failures: as long as at least $V_R$ nodes are available, read transactions can still occur.
-
-In order to provide eventual consistency, we need to change the system more. In an eventually consistent system, if there are no write transactions, the whole system should reach a consistent state after some amount of time. This means that every read transaction should eventually return the most recently written value for each key. Having removed the constraint on $V_R$, this means that values should eventually be written to at least $n - V_R + 1$ nodes.
-
-In order to achieve this, I will add an additional mechanism for sharing values between database nodes. Each write transaction has a coordinator, and that coordinator will be responsible for ultimately propagating the write to at least $n - V_R + 1$ nodes. My system assumes that the set of nodes is fixed, and there is no requirement for the time to reach consistency, so the coordinator can resume this task after failure and recovery without issue.
-
-For each database key, each node should store an integer $x$ representing the number of nodes which have definitely received the value stored.  When a value is written by a transaction coordinated by another node, that value's $x$ can be set to $n$; although not true, the propagation of that value is another node's responsibility. When a node coordinates a write transaction, it should set $x$ to the number of nodes in the write quorum.
-
-Each node then needs a background process to continually propagate values for which $x$ is smaller than $n - V_R + 1$. This could be done by initiating write transaction, but doing so would take much more time, and the consistency guarantee is not required.
-
-Instead, a node can send a lightweight write message to other nodes. When a lightweight write message is received, a node should compare the given key, value and timestamp to what it has stored. If the value received is more recent than that stored, it should update its stored value and reply. Otherwise, it should reply with its more recent value and timestamp. When receiving a response from a lightweight write, a node can either increment $x$ for the relevant key, or store a more recent value in its store.
-
-In case of failure of a lightweight write, there is no problem. The guarantees provided by full write transactions are still the same, and lightweight transactions can be retried later to eventually achieve consistency.
+% TODO: polish all the writing in this chapter
 
 \section{Data Storage}
 
 Each database node in the system needs its own key-value store. This will be built as a module independently of all distributed components of the system, and can be tested as a stand-alone module. Since the main focus of this project is distributed systems, and I expect the performance bottleneck to be network latency, this module is designed preferring simplicity over optimisation. As an extension, I may explore more efficient data structures for storage.
 
-The datastore is built on top of a Unix-like file system. The particular file system does not matter, provided modification to a file descriptor (eg. renaming a file) is an atomic operation.
+The data store is built on top of a Unix-like file system. The particular file system does not matter, provided modification to a file descriptor (eg. renaming a file) is an atomic operation.
 
 Data will be stored as binary files. The interface says that keys and values are byte arrays, which may not contain the null character. Keys and values will be written to disk as binary, using the null character (\verb|\0|) as a delimiter. The content of any valid file will match the format:
 
@@ -435,9 +367,9 @@ There is no requirement for any ordering of keys in a file, so the most efficien
 
 A simple hash function could use the prefix of the key: the first 2 bytes, for example. This would divide data uniformly if keys are random, but may group many values together if their keys are similar (which is entirely determined by the application programmer).
 
-Instead, I will use MD5. While not cryptographically secure, MD5 is a relatively fast hashing algorithm. Each file in the datastore will correspond to the first 2 bytes of an MD5 hash. This should divide data uniformly, assuming that keys are not chosen with intent to maximise the number of collisions. The name of each file will be the 2 byte prefix, encoding as a hexadecimal string to avoid use of invalid characters in filenames. This will also not require the filenames to be case sensitive in the underlying file system.
+Instead, I will use MD5. While not cryptographically secure, MD5 is a relatively fast hashing algorithm. Each file in the data store will correspond to the first 2 bytes of an MD5 hash. This should divide data uniformly, assuming that keys are not chosen with intent to maximise the number of collisions. The name of each file will be the 2 byte prefix, encoding as a hexadecimal string to avoid use of invalid characters in filenames. This will also not require the filenames to be case sensitive in the underlying file system.
 
-The most important method for the datastore to provide is atomic writes. This is achieved by writing to a shadow data structure.
+The most important method for the data store to provide is atomic writes. This is achieved by writing to a shadow data structure.
 
 My system does not allow concurrent write transactions, and each write modifies 1 key-value pair. This means that each transaction modifies one data file, and all writes are sequential. The write procedure for modifying a file $f$ is:
 
@@ -464,6 +396,149 @@ If, instead, a rollback instruction is received, delete $g$.
 %  - But many nodes sharing one disk won't work, so
 
 %  - Trie in memory, with added delay
+
+\section{Quorum Assembly}
+
+The main method for ensuring consistency in my system is quorum assembly. For a strongly consistent system, strict quorum assembly is needed. For eventual consistency, this will be modified to use a sloppy quorum method.
+
+Given a system of $n$ nodes, we first have to define two values $V_R$ and $V_W$, which are the sizes of read and write quorums, respectively. At least $V_R$ nodes must be involved in every read transaction, and at least $V_W$ nodes must be involved in every write. In a strict quorum system, we also enforce the following constraints:
+
+$$V_W > n / 2$$
+
+$$V_R + V_W > n$$
+
+The first constraint means that every value written to the database must be written to a majority of database nodes. The second constraint means that, for any read quorum, at least one node in the quorum will have the most recent version of each value stored. Where multiple conflicting values exist for the same key, we need Lamport timestamps to identify the most recent value.
+
+Lamport timestamps are monotonically increasing integers, which indicate the order in which some events occur. If some event $A$'s timestamp is smaller than another event $B$'s, then $A$ happened before $B$.
+
+In my system, each node stores a Lamport timestamp for each database key. Where different nodes have conflicting values for the same key, the one with the greater clock value is most recent.
+
+In order to ensure Lamport clock values do not overflow, and thus to ensure they are monotonically increasing, my system will use 64 bit unsigned integers for Lamport clocks. A clock value is incremented each time the associated key-value pair is overwritten. Assuming a high throughput, with 1 transaction every 10 milliseconds writing to the same key, the time before the Lamport clock overflows will be $2^{64} \times 10 \cdot 10^{-3} = 1.84 \cdot 10^{16} \text{seconds}$. This is more than 5 billion years, so 64 bit timestamps should be adequate.
+
+Building on the basic data store interface, Lamport clock values will be stored as part of the value. At the lower level, each value is actually the concatenation of a Lamport timestamp and the data being stored. In the case when a value is deleted, the concatenation of a timestamp and an empty byte array will be stored. This indicates that a value has been deleted from this node, which will be necessary for reads (for example, when a read quorum contains some nodes on which a value has been deleted, and some which still have a stale value), but does not violate the requirement of not storing null values in the low-level store.
+
+The procedure for a read transaction is:
+
+\begin{itemize}
+\item
+A node receives a read request from the client. This node shall be the coordinator.
+
+\item
+Assemble a quorum of at least $V_R$ nodes, and obtain a lock on each node in the quorum.
+
+\item
+The coordinator queries each node in the quorum with the given key.
+
+\item
+Each node returns the value it has stored, and the Lamport clock associated with the key, or says it has no value stored for the key.
+
+\item
+The coordinator identifies the value with the highest Lamport timestamp, and returns that value as the result.
+
+\item
+The coordinator releases all locks.
+
+\end{itemize}
+
+Note that this may reach a deadlock condition. Suppose there are multiple concurrent transactions, concurrently acquiring locks on nodes. This may reach a condition where every node is locked, but no coordinator has assembled a complete quorum. If latency was not an issue, we could avoid this by always acquiring locks in the same order, ordered by node IDs. This would require $O(V_W)$ RTTs. Since $V_W > n / 2$, this would add significant latency with a large number of nodes (eg. $RTT = 20$ ms, $V_W = 500$ means acquiring locks would take $2$ seconds). Note that on average half of the nodes involved are unavailable throughout those 2 seconds, so this would have a significant effect on availability.
+
+There will also be a problem if the coordinator fails before it releases locks. This would leave nodes permanently locked, and effectively useless.
+
+To fix both of these problems, each node should set a timer when its lock is acquired, and reset that timer each time it responds to a request from the coordinator. If the timer runs out, it should release its lock. If it subsequently receives a request from the coordinator, it should return an error. The coordinator, if it receives an error, should abort and retry the transaction.
+
+Note that, since every node in a read quorum is locked, and given the constraint $V_R + V_W > n$, there cannot be concurrent read and write transactions. This imposes a happens-before relationship between each read transaction and every write transaction, so ensures that the value read is consistent. There may be concurrent read transactions; this has no effect on consistency, and will allow greater throughput.
+
+The procedure for write transactions is similar to that for reads, but requires additional work to ensure atomicity. When a value is written, it must be either written to a full write quorum, or not written at all. This is achieved using an atomic commit protocol, 2 phase commit (2PC).
+
+The write procedure is:
+
+\begin{itemize}
+\item
+A node receives a write request from the client. This node shall be the coordinator.
+
+\item
+Assemble a quorum of at least $V_W$ nodes, and obtain a lock on each node in the quorum.
+
+\item
+The coordinator queries the existing value for the required key from each node in the quorum. Note that this is essentially a read transaction before a write transaction, which is why strict quorum is sometimes describe as ``read your own writes''
+
+\item
+Each node returns the value it has stored for the given key, and the Lamport clock associated with that key.
+
+\item
+The coordinator identifies the most recent timestamp associated with the key. Note that, given the constraint $V_W > n / 2$, this must be the most recent write for the key. The coordinator increments the greatest timestamp to get the timestamp for the new write.
+
+\item
+The coordinator initiates 2PC with all the nodes in the quorum, to write the new value and the new Lamport timestamp.
+
+\item
+The coordinator releases all locks.
+
+\end{itemize}
+
+The same deadlock condition as with read transactions applies here, so we will use the same timer system for pre-emption.
+
+\section{Two-Phase Commit (2PC)}
+
+In 2PC, the coordinator begins by sending the transaction to each node in the quorum, as well as sending a list of nodes involved in the transaction.
+
+Each node should then execute the transaction, writing the new value to persistent storage but not yet committing. It should save a new vector clock value with the new value, which is the merge of its existing vector for the key, and the vector clock from the coordinator. It should then respond to the coordinator with a yes vote, and a copy of its new vector clock for the key. In case of any failure, it should respond with a no vote, and can cancel the transaction.
+
+If the coordinator receives a yes vote from every node, it should:
+
+\begin{itemize}
+\item
+Send a commit message to each node.
+
+\item
+Wait for an acknowledgement from each node.
+
+\item
+When it receives an acknowledgement from every node, commit the transaction to its own disk.
+
+\end{itemize}
+
+In the case that the coordinator does not receive an acknowledgement from every node, it should repeatedly send commit messages until it does so. This is one drawback of 2PC: it is a blocking protocol. Until all nodes involved have acknowledged, a write transaction cannot be completed. Note that all nodes involved are locked throughout this time; given that concurrent writes are not allowed, this will affect the availability of the system, but it does provide consistency.
+
+If the coordinator doesn't receive a yes vote from every node (either at least one no vote, or a response times out), it should send a rollback message to all nodes.
+
+In case of the coordinator failing, all other nodes in the transaction will timeout. In this case, since they all know the identifiers of all nodes involved in the transaction, the node with the lowest identifier becomes a new coordinator. The new coordinator queries all other nodes for their votes. In case any node voted no, it should be aborted. Otherwise, the transaction can be completed. When the coordinator recovers, it can determine from the other nodes whether or not the transaction was committed.
+
+2PC is tolerant of most failure scenarios.
+
+\begin{itemize}
+\item
+In the case of a node (or several nodes) other than the coordinator failing before sending a yes vote, the coordinator will abort the transaction.
+
+\item
+In the case of a node other than the coordinator failing after sending a yes vote, the failed transaction will be stored persistently on that node, so the node will be able to recover.
+
+\item
+In the case of the coordinator failing, all other nodes involved in the transaction can communicate to decide whether or not to abort. The transaction will be stored persistently on the coordinator node, so the coordinator can recover in the same way as any other node failing after voting yes.
+
+\end{itemize}
+
+A limitation of this is that it is not tolerant of data loss on failure, for example due to disk failure. This is a limitation of my system. In the real world, each node could store data on multiple disks in a RAID array, making the chance of data loss negligible. In case of total loss of database nodes, data could still be recovered provided at least half of the database nodes are unaffected, although at the cost of availability.
+
+Another issue is the case of simultaneous failure of both the coordinator and another node. In this case, the remaining nodes could try to recover, but could not know whether the second failed node voted yes or no. This is a limitation of my system. As an extension, I may modify the system to use three-phase commit (3PC), which addresses this problem.
+
+\section{Sloppy Quorum}
+
+Sloppy quorum is a modification to the strict quorum system, which does not provide strong consistency guarantees. The procedure for transactions is the same as before, but we remove the constraint $V_R + V_W > n$.
+
+This means that a read transaction may not return the most recent value for the requested key; it may return a stale value. The benefit is that more read transactions can occur concurrently, which will allow a greater throughput of transactions, and the system can remain available for read after a larger number of node failures: as long as at least $V_R$ nodes are available, read transactions can still occur.
+
+In order to provide eventual consistency, we need to change the system more. In an eventually consistent system, if there are no write transactions, the whole system should reach a consistent state after some amount of time. This means that every read transaction should eventually return the most recently written value for each key. Having removed the constraint on $V_R$, this means that values should eventually be written to at least $n - V_R + 1$ nodes.
+
+In order to achieve this, I will add an additional mechanism for sharing values between database nodes. Each write transaction has a coordinator, and that coordinator will be responsible for ultimately propagating the write to at least $n - V_R + 1$ nodes. My system assumes that the set of nodes is fixed, and there is no requirement for the time to reach consistency, so the coordinator can resume this task after failure and recovery without issue.
+
+For each database key, each node should store an integer $x$ representing the number of nodes which have definitely received the value stored.  When a value is written by a transaction coordinated by another node, that value's $x$ can be set to $n$; although not true, the propagation of that value is another node's responsibility. When a node coordinates a write transaction, it should set $x$ to the number of nodes in the write quorum.
+
+Each node then needs a background process to continually propagate values for which $x$ is smaller than $n - V_R + 1$. This could be done by initiating write transaction, but doing so would take much more time, and the consistency guarantee is not required.
+
+Instead, a node can send a lightweight write message to other nodes. When a lightweight write message is received, a node should compare the given key, value and timestamp to what it has stored. If the value received is more recent than that stored, it should update its stored value and reply. Otherwise, it should reply with its more recent value and timestamp. When receiving a response from a lightweight write, a node can either increment $x$ for the relevant key, or store a more recent value in its store.
+
+In case of failure of a lightweight write, there is no problem. The guarantees provided by full write transactions are still the same, and lightweight transactions can be retried later to eventually achieve consistency.
 
 \section{Leadership Election}
 
@@ -505,8 +580,6 @@ Since any node may create a token, the system may reach a state when there are m
 
 \section{Thread Confinement}
 
-% TODO: citation about thread confinement
-
 My database system, like all distributed systems, uses a lot of concurrency, both between separate database nodes and clients, and within each node. Building concurrency systems requires a lot of work to ensure thread-safety.
 
 My system is built in Go, which provides some helpful primitives for concurrent programming: goroutines and channels.
@@ -517,9 +590,9 @@ Typically, threads have a stack size around 1MB. This means that the number of a
 
 Channels in Go are essentially thread-safe queue structures. These are ideal for producer-consumer patterns. Enqueue operations on a channel block if the channel is full, and dequeue operations block if the channel is empty.
 
-Within each database node, my system uses a thread confinement pattern to avoid deadlock and race conditions. This is based on a Go idiom: ``Do not communicate by sharing memory; instead, share memory by communicating.'' The state of each node belongs to a single goroutine, and cannot be read or modified directly by any other goroutine. \cite{effective}
+Within each database node, my system uses a thread confinement pattern to avoid deadlock and race conditions. This is based on a Go idiom: ``Do not communicate by sharing memory; instead, share memory by communicating.'' The state of each node belongs to a single goroutine, and cannot be read or modified directly by any other goroutine \cite{effective}.
 
-Each database node essentially receives messages from the network, and processes them. How it responds to a message depends on a state machine. Based on this, it may send messages to other nodes or clients, change state and modify its local data store (or several or node of those). Importantly, some operations, such as accessing the datastore, require waiting for I/O.
+Each database node essentially receives messages from the network, and processes them. How it responds to a message depends on a state machine. Based on this, it may send messages to other nodes or clients, change state and modify its local data store (or several or node of those). Importantly, some operations, such as accessing the data store, require waiting for I/O.
 
 The node's local state machine is owned by a single goroutine responsible for the main loop. This loop must not block for a prolonged period time. Other goroutines within the node are responsible for blocking operations, including setting timers. When a transaction times out, for example, the goroutine responsible cannot update the main state machine; instead, it sends a message to the main loop, using a channel. The main loop receives the message and responds appropriately. Importantly, only the main loop can access the state machine, so there can be no race conditions, without using any locks. Care must be taken to ensure the main loop cannot block, but I found this easier in practice than managing locks everywhere.
 
@@ -535,17 +608,33 @@ To fix this, each node stores all transaction IDs for which it has received an u
 
 This leads to each node accumulating a record of every transaction ever, so make it soft state.
 
-\section{Test Framework}
+\section{Remote Procedure Calls}
 
-% TODO: rewrite this a lot
+For distributed systems, in general, clients making requests are not directly connected; they can only communicate using an unreliable network. Given this limitation, some system is needed to encapsulate procedure calls. Such systems are often based on hypertext transfer protocol (HTTP), due to its wide usage on the Internet.
+
+One method is representational state transfer (REST), which is based on the concept of resources. The URL should contain the name of a resource, and the type of operation should be indicated by the HTTP verb (GET, POST, PUT etc.) used. This works well with create, read, update and delete (CRUD) operations which are meaningful in database systems.
+
+One drawback of REST is its inefficiency. Suppose we have 4 types of operations. The information conveyed by specifying the type of operation is 2 bits. The HTTP verb GET uses 3 bytes, so is a very inefficient encoding.
+
+Instead, we can use an RPC library which is not based on text encoding. RPC libraries can also provide significant abstractions, so that RPC calls are very similar to normal function calls, from the client's point of view. For example, Java's remote method invocation system provides an abstraction over serialising and deserialising Java objects, and providing distributed garbage collection.
+
+For this project, I will not use any RPC solution which would be used in a real deployment. Since I am going to run the whole system on a single machine, I can use a much simpler mechanism. HTTP (using transmission control protocol, TCP) provides support for (mostly) reliable communication over unreliable networks, using checksums and re-transmission. On a single machine, I will have a reliable simulated network, so TCP is unnecessary, and would add additional complexity and latency to the system.
+
+In order to evaluate my system, I need to be able to add variable latency and packet loss to simulate different network conditions. By minimising the latency of my RPC service, there will be minimal noise affecting my measurements.
+
+% TODO: I needed to implement some parts of RPC (session management), but Go on a single machine gives me some things for free (presentation)
+
+\section{Test Framework}
 
 My system will be built so that it interfaces closely with my test framework, using my RPC system. This will provide an ideal environment for integration testing and evaluating the system's performance. The architecture is based on two of Go's concurrency primitives: goroutines and channels.
 
-Goroutines are similar to threads. Rather than using OS-level scheduling, the Go runtime has its own scheduler. Goroutines, unlike normal threads, have dynamically-sized stacks. Typically, threads have a stack size around 1MB. This means that the number of active threads is limited by memory usage. Using a smaller stack allows more threads, but limits the number of stack frames before a stack overflow error. Using dynamically-sized stacks, the number of active goroutines can be much larger.
+Goroutines are similar to threads. Rather than using OS-level scheduling, the Go runtime has its own scheduler. Goroutines, unlike normal threads, have dynamically-sized stacks, between 8 kB and 1 GB \cite{gosrc}. Typically, threads have a stack size around 1MB. This means that the number of active threads is limited by memory usage. Using a smaller stack allows more threads, but limits the number of stack frames before a stack overflow error. Using dynamically-sized stacks, the number of active goroutines can be much larger.
+
+Goroutines also have more efficient scheduling than threads in the OS. For example, the Go runtime knows which registers are live, so can copy the minimum number of register values, whereas the OS has to assume all registers are live and save the contents of all of them.
 
 Channels in Go are essentially thread-safe queue structures. These are ideal for producer-consumer patterns. Consumers can easily poll the queue, blocking until a value is available. My design uses channels to simulate network links.
 
-Each database node will run as its own goroutine. The system will support a fixed number of nodes, so each node will be identified by a unique integer. These will be assigned sequentially and remain constant, so they can be used as addresses in the simulated network.
+Each database node will run as its own goroutine. The system will support a fixed number of nodes, so each node will be identified by a unique integer. These will be assigned sequentially and remain constant, so they can be used as addresses in the simulated network. % TODO: discuss name servers (DNS, alternatives)
 
 For each database node, there will be two channels: one for incoming messages, and one for outgoing messages. A message may be a request from a (simulated) external client, a response to such a request, or a message used to coordinate nodes in the system. A message has 3 fields: source and destination addresses (integers), and a payload, the structure of which depends on the type of message. In order to handle a message, the network simulator only needs to inspect the source and destination addresses.
 
@@ -575,11 +664,11 @@ Once all requests have either timed out or been responded to, the main routine w
 \chapter{Evaluation}
 % 20% (with conclusions)
 
-General test conditions \cite{nunemaker}
+General test conditions \cite{nunemaker}, the 8 fallacies % (https://en.wikipedia.org/wiki/Fallacies_of_distributed_computing)
 
 Strict Quorum
 
-- Is the output consistent? How is this tested?
+- Is the output consistent? Test linearisability \cite{herlihy1990linearizability}
 
 - Performance with difference quorum sizes
 
