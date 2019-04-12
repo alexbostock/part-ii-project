@@ -5,6 +5,7 @@ package datastore
 
 import (
 	"os"
+	"time"
 )
 
 // A Store is a local key-value store. There are currently two different
@@ -23,7 +24,16 @@ type Store interface {
 // to a data directory.
 func New(path string) Store {
 	if path == "" {
-		return &memstore{nil, make(map[byte]*memstore), make(map[int]pair), 0}
+		return &memstore{
+			nil,
+			make(map[byte]*memstore),
+			make(map[int]pair),
+			0,
+
+			310 * time.Microsecond,
+			time.Second / 150000,
+			time.Second / 285000,
+		}
 	} else {
 		os.Mkdir(path, 0755)
 		return &persistentstore{path, 0}

@@ -1,6 +1,9 @@
 package datastore
 
-import "bytes"
+import (
+	"bytes"
+	"time"
+)
 
 // An in-memory datastore module
 
@@ -16,29 +19,46 @@ type memstore struct {
 	children    map[byte]*memstore
 	uncommitted map[int]pair
 	txid        int
+
+	seekTime    time.Duration
+	kbReadTime  time.Duration
+	kbWriteTime time.Duration
 }
 
 // Get retrieves the requested value from the store. It has an err return value
 // to match the Store interface, but err is always nil.
 func (store *memstore) Get(key []byte) ([]byte, error) {
+	t := time.NewTimer(time.Duration(len(key)/1000)*store.kbReadTime + store.seekTime)
+
 	if len(key) == 0 {
+		<-t.C
+		t = time.NewTimer(time.Duration(len(store.value)/1000) * store.kbReadTime)
+		<-t.C
+
 		return store.value, nil
 	}
 	if store.children[key[0]] != nil {
 		return store.children[key[0]].Get(key[1:])
 	}
+
+	<-t.C
+
 	return nil, nil
 }
 
 // Put stores the requested value in the store and returns a unique, non-zero
 // transaction ID. This operation is always successful.
 func (store *memstore) Put(key, val []byte) int {
+	t := time.NewTimer(time.Duration(len(val)/1000)*store.kbWriteTime + store.seekTime)
+
 	store.txid++
 	if store.txid == 0 {
 		store.txid++
 	}
 
 	store.uncommitted[store.txid] = pair{key, val}
+
+	<-t.C
 
 	return store.txid
 }
