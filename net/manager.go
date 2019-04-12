@@ -94,22 +94,24 @@ func Simulate(o Options) {
 
 	// Address numNodes is the "client" address, used by the manager
 	nodes[numNodes] = &dbnode.Dbnode{
-		Incoming: make(chan packet.Message, 1000),
-		Outgoing: make(chan packet.Message, 1000),
+		Incoming: make(chan packet.Message, 500),
+		Outgoing: make(chan packet.Message, 500),
 	}
 
 	timer := &logger{startTime: time.Now()}
 
+	partitionTracker := newPartitions(int(numNodes))
+
 	// Start the network only after all nodes have been created to avoid
 	// deferencing nil pointers
 	for i = 0; i < numNodes; i++ {
-		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), monitor)
+		go startHelper(nodes[i].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), monitor, partitionTracker)
 	}
 
-	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), monitor)
+	go startHelper(nodes[numNodes].Outgoing, nodes, *o.MeanMsgLatency, math.Sqrt(*o.MsgLatencyVariance), monitor, partitionTracker)
 
 	if *o.NodeFailureRate > 0 {
-		go triggerNodeFailures(nodes, *o.NodeFailureRate, *o.MeanFailTime, *o.FailTimeVariance, timer)
+		go triggerNodeFailures(nodes, *o.NodeFailureRate, *o.MeanFailTime, *o.FailTimeVariance, timer, partitionTracker)
 	}
 
 	if *o.ConvergenceTest {
@@ -125,11 +127,15 @@ func Simulate(o Options) {
 	}
 }
 
-func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean float64, stddev float64, m *monitor) {
+func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean float64, stddev float64, m *monitor, p *partitions) {
 	for msg := range outgoing {
 		if msg.Dest < len(links) {
-			// Normally distributed delay for now
-			// TODO: better simulation of tcp latency
+			if msg.Src < msg.Dest && !p.linkAvailable(msg.Src, msg.Dest) {
+				continue
+			}
+			if msg.Dest < msg.Src && !p.linkAvailable(msg.Dest, msg.Src) {
+				continue
+			}
 
 			delay := rand.NormFloat64()*stddev + mean
 
@@ -143,7 +149,12 @@ func startHelper(outgoing chan packet.Message, links []*dbnode.Dbnode, mean floa
 func sendAfterDelay(msg packet.Message, link chan packet.Message, delay time.Duration) {
 	time.Sleep(delay)
 
-	link <- msg
+	select {
+	case link <- msg:
+		// If the destination buffer is not full, send the message
+	default:
+		// Else, discard the message
+	}
 }
 
 func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTransactions uint, transactionRate, proportionWrites float64, numAttempts uint, m *monitor) {
@@ -202,27 +213,73 @@ func sendConvergenceTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logg
 	time.Sleep(20 * timeout)
 }
 
-func triggerNodeFailures(nodes []*dbnode.Dbnode, failRate, mean, variance float64, l *logger) {
+func triggerNodeFailures(nodes []*dbnode.Dbnode, failRate, mean, variance float64, l *logger, p *partitions) {
 	stddev := math.Sqrt(variance)
 
 	for {
 		time.Sleep(time.Duration(rand.ExpFloat64()/(failRate/100)) * time.Second)
 
-		id := int(rand.Float64() * float64(len(nodes)-1))
+		// 50/50 chance of a single node failure or a partition
+		if rand.Float64() < 0.5 {
+			// Single node failure
 
-		nodes[id].Incoming <- packet.Message{
-			DemuxKey: packet.ControlFail,
-		}
+			id := int(rand.Float64() * float64(len(nodes)-1))
 
-		delay := rand.NormFloat64()*stddev + mean
-
-		go func(node *dbnode.Dbnode, delay time.Duration) {
-			time.Sleep(delay)
-
-			node.Incoming <- packet.Message{
-				DemuxKey: packet.ControlRecover,
+			nodes[id].Incoming <- packet.Message{
+				DemuxKey: packet.ControlFail,
 			}
-		}(nodes[id], time.Duration(delay)*time.Second)
+
+			delay := rand.NormFloat64()*stddev + mean
+
+			go func(node *dbnode.Dbnode, delay time.Duration) {
+				time.Sleep(delay)
+
+				node.Incoming <- packet.Message{
+					DemuxKey: packet.ControlRecover,
+				}
+			}(nodes[id], time.Duration(delay)*time.Second)
+		} else {
+			// Partition
+
+			n := len(nodes)
+
+			links := make(map[int]map[int]bool)
+
+			for i := 0; i < n; i++ {
+				s := rand.Intn(n)
+				d := rand.Intn(n)
+
+				if s < d {
+					l := links[s]
+					if l == nil {
+						l = make(map[int]bool)
+					}
+					l[d] = true
+					links[s] = l
+				} else {
+					l := links[d]
+					if l == nil {
+						l = make(map[int]bool)
+					}
+					l[s] = true
+					links[d] = l
+				}
+			}
+
+			fmt.Println("Partition created")
+
+			p.createPartition(links) // map[int]map[int]bool
+
+			delay := rand.NormFloat64()*stddev + mean
+
+			go func(links map[int]map[int]bool, delay time.Duration) {
+				time.Sleep(delay)
+
+				fmt.Println("Partition recovered")
+
+				p.removePartition(links)
+			}(links, time.Duration(delay)*time.Second)
+		}
 	}
 }
 

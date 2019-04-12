@@ -16,16 +16,18 @@ func TestDatabase(t *testing.T) {
 
 	nodes := make([]*dbnode.Dbnode, 6)
 
+	p := newPartitions(numNodes)
+
 	for i := 0; i < numNodes; i++ {
 		nodes[i] = dbnode.New(numNodes, i, timeout, false, quorumSize, quorumSize, false)
-		go startHelper(nodes[i].Outgoing, nodes, 0, 0, nil)
+		go startHelper(nodes[i].Outgoing, nodes, 0, 0, nil, p)
 	}
 
 	nodes[numNodes] = &dbnode.Dbnode{
 		Incoming: make(chan packet.Message, 100),
 		Outgoing: make(chan packet.Message, 100),
 	}
-	go startHelper(nodes[numNodes].Outgoing, nodes, 0, 0, nil)
+	go startHelper(nodes[numNodes].Outgoing, nodes, 0, 0, nil, p)
 
 	client := NewClient(nodes, timeout, 1)
 
