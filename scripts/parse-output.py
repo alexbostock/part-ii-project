@@ -96,6 +96,8 @@ failed_writes = 0
 total_time_taken = 0
 time_taken_reads = 0
 time_taken_writes = 0
+time_taken_successful_reads = 0
+time_taken_successful_writes = 0
 
 transactions = {} # Keyed by key
 
@@ -127,12 +129,14 @@ for line in sys.stdin:
 
             if t.ok == SUCCESS:
                 successful_reads += 1
+                time_taken_successful_reads += t.time_taken
         else:
             total_writes += 1
             time_taken_writes += t.time_taken
 
             if t.ok == SUCCESS:
                 successful_writes += 1
+                time_taken_successful_writes += t.time_taken
             elif t.ok == FAILURE:
                 failed_writes += 1
 
@@ -149,6 +153,8 @@ print('Total time taken (milliseconds):', round(total_time_taken/1000))
 print(total_reads, 'reads and', total_writes, 'writes processed')
 print('Average read response time (ms):', round(div(time_taken_reads/1000, total_reads)))
 print('Average write response time (ms):', round(div(time_taken_writes/1000, total_writes)))
+print('Average successful read latency (ms):', round(div(time_taken_successful_reads/1000, successful_reads)))
+print('Average successful write latency (ms):', round(div(time_taken_successful_writes/1000, successful_writes)))
 print(successful_reads, '(' + str(round(100*div(successful_reads, total_reads), 1)) + '%) reads were successful')
 print(successful_writes, '(' + str(round(100*div(successful_writes, total_writes), 1)) + '%) writes were successful')
 print(total_writes-successful_writes-failed_writes, 'writes have unknown response')
