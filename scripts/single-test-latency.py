@@ -6,12 +6,20 @@ import sys
 pr = re.compile('(?P<start>[0-9]+) (?P<end>[0-9]+) read')
 pw = re.compile('(?P<start>[0-9]+) (?P<end>[0-9]+) write')
 
+node_fail_p = re.compile('Node [0-9]+ failed.+')
+node_recover_p = re.compile('Node [0-9]+ recovered')
+
 filename = sys.argv[1]
 
 read_times = []
 read_latencies = []
 write_times = []
 write_latencies = []
+
+node_fail_times = []
+node_recover_times = []
+partition_times = []
+partition_recover_times = []
 
 f = open(filename, 'r')
 
@@ -25,6 +33,20 @@ for line in f:
     if m != None:
         write_times.append(int(m.group('start')))
         write_latencies.append(int(m.group('end')) - read_times[-1])
+
+    m = node_fail_p.match(line)
+    if m != None:
+        node_fail_times.append(read_times[-1])
+
+    m = node_recover_p.match(line)
+    if m != None:
+        node_recover_times.append(read_times[-1])
+
+    if line == 'Partition created\n':
+        partition_times.append(read_times[-1])
+
+    if line == 'Partition recovered\n':
+        partition_recover_times.append(read_times[-1])
 
 def rolling_average(index, window, xs, ys):
     sum = 0
@@ -66,6 +88,20 @@ for i in range(len(xs)):
 xs = list(map(lambda x: x / 1000000, xs))
 
 plt.scatter(xs, rolling_means, label='Writes')
+
+print(node_fail_times, node_recover_times, partition_times, partition_recover_times)
+
+for time in node_fail_times:
+    plt.axvline(x=time / 1000000, color='m')
+
+for time in node_recover_times:
+    plt.axvline(x=time / 1000000, color='c')
+
+for time in partition_times:
+    plt.axvline(x=time / 1000000, color='r')
+
+for time in partition_recover_times:
+    plt.axvline(x=time / 1000000, color='g')
 
 plt.legend()
 

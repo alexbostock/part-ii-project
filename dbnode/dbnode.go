@@ -171,11 +171,11 @@ func (n *Dbnode) handleRequests() {
 
 					fmt.Printf("Node %v failed while in mode %v\n", n.id, n.currentMode)
 
-					if n.currentMode != coordinatingWrite {
+					if n.currentMode != coordinatingWrite && n.currentMode != assemblingQuorum {
 						n.currentMode = idle
 						n.currentTxid = -1
-
-						// TODO: delete uncommited*
+						n.clientRequest = packet.Message{}
+						n.quorumMembers = nil
 					}
 				}
 
@@ -216,7 +216,7 @@ func (n *Dbnode) handleRequests() {
 				} else if n.elector.Leader() == n.id {
 					n.lockRequests.enqueue(&msg)
 					go func() {
-						time.Sleep(n.lockTimeout)
+						time.Sleep(10 * n.lockTimeout)
 						timedOutLockRequests <- &msg
 					}()
 				} else {
