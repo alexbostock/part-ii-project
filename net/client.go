@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/alexbostock/part-ii-project/dbnode"
-	"github.com/alexbostock/part-ii-project/packet"
+	"github.com/alexbostock/part-ii-project/net/packet"
 )
 
 // A PutResponse indicates whether a put transaction succeeded, if that is

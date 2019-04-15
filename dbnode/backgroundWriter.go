@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alexbostock/part-ii-project/packet"
+	"github.com/alexbostock/part-ii-project/net/packet"
 )
 
 // A propagater quietly streams write requests to other nodes and tracks

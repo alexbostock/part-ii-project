@@ -14,7 +14,7 @@ import (
 	"github.com/alexbostock/part-ii-project/datastore"
 	"github.com/alexbostock/part-ii-project/dbnode/elector"
 	"github.com/alexbostock/part-ii-project/dbnode/repeater"
-	"github.com/alexbostock/part-ii-project/packet"
+	"github.com/alexbostock/part-ii-project/net/packet"
 )
 
 type mode int

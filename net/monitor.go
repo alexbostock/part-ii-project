@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/alexbostock/part-ii-project/dbnode"
-	"github.com/alexbostock/part-ii-project/packet"
+	"github.com/alexbostock/part-ii-project/net/packet"
 )
 
 type monitor struct {

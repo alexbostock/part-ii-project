@@ -1,6 +1,6 @@
 package elector
 
-import "github.com/alexbostock/part-ii-project/packet"
+import "github.com/alexbostock/part-ii-project/net/packet"
 
 // A Dummy is a do-nothing elector, equivalent to no election algorithm
 type Dummy struct {

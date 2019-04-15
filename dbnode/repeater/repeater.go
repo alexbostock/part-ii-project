@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alexbostock/part-ii-project/packet"
+	"github.com/alexbostock/part-ii-project/net/packet"
 )
 
 // A Repeater provides methods to resend messages until they are acknowledged.

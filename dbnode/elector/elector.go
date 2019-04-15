@@ -1,7 +1,7 @@
 // Package elector implements a leadership election.
 package elector
 
-import "github.com/alexbostock/part-ii-project/packet"
+import "github.com/alexbostock/part-ii-project/net/packet"
 
 // An Elector acts as a node in an election. it should be instantiated using New
 type Elector interface {

@@ -3,7 +3,7 @@ package elector
 import (
 	"time"
 
-	"github.com/alexbostock/part-ii-project/packet"
+	"github.com/alexbostock/part-ii-project/net/packet"
 )
 
 // A bully is an Elector based on the bully algorithm.

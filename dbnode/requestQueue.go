@@ -1,7 +1,7 @@
 package dbnode
 
 import (
-	"github.com/alexbostock/part-ii-project/packet"
+	"github.com/alexbostock/part-ii-project/net/packet"
 )
 
 type queue struct {
