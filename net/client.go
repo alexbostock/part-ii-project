@@ -38,6 +38,19 @@ func (p PutResponse) String() string {
 	}
 }
 
+var idStream chan int
+
+func init() {
+	idStream = make(chan int)
+	go generateIds()
+}
+
+func generateIds() {
+	for i := 0; true; i++ {
+		idStream <- i
+	}
+}
+
 // A Client is an interface to the remote database system. it should be
 // instantiated using NewClient. All methods block until either a response is
 // received from the remote coordinator, or a timeout lapses.
@@ -47,7 +60,6 @@ type Client struct {
 	numAttempts int
 	timeout     time.Duration
 
-	idStream      chan int
 	responseChans sync.Map
 }
 
@@ -61,20 +73,11 @@ func NewClient(nodes []*dbnode.Dbnode, timeout time.Duration, numAttempts int) *
 		numNodes:    len(nodes) - 1,
 		numAttempts: numAttempts,
 		timeout:     3 * timeout,
-
-		idStream: make(chan int),
 	}
 
-	go c.generateIds()
 	go c.routeResponses()
 
 	return c
-}
-
-func (c *Client) generateIds() {
-	for i := 0; true; i++ {
-		c.idStream <- i
-	}
 }
 
 func (c *Client) routeResponses() {
@@ -100,7 +103,7 @@ func (c *Client) routeResponses() {
 // (which may be nil) and the second is the timestamp associated with the value.
 func (c *Client) Get(key []byte) ([]byte, uint64, bool) {
 	for i := 0; i < c.numAttempts; i++ {
-		id := <-c.idStream
+		id := <-idStream
 
 		resChan := make(chan packet.Message, 1)
 		c.responseChans.Store(id, resChan)
@@ -138,7 +141,7 @@ func (c *Client) Get(key []byte) ([]byte, uint64, bool) {
 // transaction was successful, it returns a timestamp.
 func (c *Client) Put(key, val []byte) (resType PutResponse, timestamp uint64) {
 	for i := 0; i < c.numAttempts; i++ {
-		id := <-c.idStream
+		id := <-idStream
 
 		resChan := make(chan packet.Message, 1)
 		c.responseChans.Store(id, resChan)

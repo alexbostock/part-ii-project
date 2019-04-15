@@ -115,7 +115,8 @@ func Simulate(o Options) {
 	}
 
 	if *o.ConvergenceTest {
-		sendConvergenceTests(nodes, timeout, timer, *o.NumTransactions, monitor)
+		go sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate*3/4, *o.ProportionWriteTransactions, *o.NumAttempts, monitor)
+		sendConvergenceTests(nodes, timeout, timer, *o.NumTransactions/1000, monitor)
 	} else {
 		sendTests(nodes, timeout, timer, *o.NumTransactions, *o.TransactionRate, *o.ProportionWriteTransactions, *o.NumAttempts, monitor)
 	}
@@ -162,7 +163,6 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 
 	var i uint
 	for i = 0; i < numTransactions; i++ {
-		// TODO: Parameterise key and value sizes
 		key := make([]byte, 1)
 		rand.Read(key)
 		removeZeroBytes(key)
@@ -170,7 +170,6 @@ func sendTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logger, numTran
 		if rand.Float64() < proportionWrites {
 			val := make([]byte, 8)
 			rand.Read(val)
-			removeZeroBytes(val)
 
 			go writeRequest(client, l, key, val)
 		} else {
@@ -189,8 +188,9 @@ func sendConvergenceTests(nodes []*dbnode.Dbnode, timeout time.Duration, l *logg
 
 	var i uint
 	for i = 0; i < numTests; i++ {
-		key := make([]byte, 1)
-		rand.Read(key)
+		// Normal tests never have keys with 0 bytes, so always use key [0] to
+		// distinguish convergence test transactions from others
+		key := []byte{0}
 
 		oldVal := make([]byte, 8)
 		rand.Read(oldVal)
