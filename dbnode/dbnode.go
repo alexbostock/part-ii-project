@@ -72,6 +72,8 @@ type Dbnode struct {
 
 	stateQueryReq chan bool
 	stateQueryRes chan int
+
+	logWrites bool
 }
 
 // New creates a new database node and starts the main loop to handle requests
@@ -87,7 +89,7 @@ type Dbnode struct {
 // rqs: the minimum size of a read quorum.
 // wqs: the minimum size of a write quorum.
 // sloppyQuorum: true enables background writes to achieve eventual consistency.
-func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uint, wqs uint, sloppyQuorum bool) *Dbnode {
+func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uint, wqs uint, sloppyQuorum bool, logWrites bool) *Dbnode {
 	outgoing := make(chan packet.Message, 1000)
 
 	var store datastore.Store
@@ -122,6 +124,8 @@ func New(n int, id int, lockTimeout time.Duration, persistentStore bool, rqs uin
 
 		internalTimer: make(chan int),
 		elector:       elector.New(id, n, outgoing),
+
+		logWrites: logWrites,
 	}
 
 	go state.handleRequests()
@@ -635,6 +639,10 @@ func (n *Dbnode) handleBackgroundWriteReq(msg packet.Message) {
 			Timestamp: msg.Timestamp,
 			Ok:        true,
 		}
+
+		if n.logWrites {
+			log.Println(n.id, "background write", msg.Key, msg.Timestamp)
+		}
 	} else {
 		n.Outgoing <- packet.Message{
 			Id:        msg.Id,
@@ -892,6 +900,10 @@ func (n *Dbnode) continueProcessing() {
 				Value:     n.clientRequest.Value,
 				Timestamp: n.quorumMembers[n.id].Timestamp,
 				Ok:        true,
+			}
+
+			if n.logWrites {
+				log.Println(n.id, "write commit", n.clientRequest.Key, n.quorumMembers[n.id].Timestamp)
 			}
 
 			if n.backgroundWriteDaemon != nil {

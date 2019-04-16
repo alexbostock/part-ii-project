@@ -50,11 +50,14 @@ type Options struct {
 	NumAttempts                 *uint
 	SloppyQuorum                *bool
 	ConvergenceTest             *bool
+	LogWrites                   *bool
 }
 
 // Simulate starts database nodes, sets up the simulated network, and sends
 // random client requests as tests, based on the given parameters.
 func Simulate(o Options) {
+	log.SetFlags(log.Lmicroseconds)
+
 	sloppyQuorum := *o.SloppyQuorum || *o.ConvergenceTest
 
 	numNodes := *o.NumNodes
@@ -89,7 +92,7 @@ func Simulate(o Options) {
 
 	var i uint
 	for i = 0; i < numNodes; i++ {
-		nodes[i] = dbnode.New(int(numNodes), int(i), timeout, *o.PersistentStore, rqs, wqs, sloppyQuorum)
+		nodes[i] = dbnode.New(int(numNodes), int(i), timeout, *o.PersistentStore, rqs, wqs, sloppyQuorum, *o.LogWrites)
 	}
 
 	// Address numNodes is the "client" address, used by the manager
