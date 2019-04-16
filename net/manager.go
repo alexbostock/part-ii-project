@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 
@@ -57,6 +58,7 @@ type Options struct {
 // random client requests as tests, based on the given parameters.
 func Simulate(o Options) {
 	log.SetFlags(log.Lmicroseconds)
+	log.SetOutput(os.Stdout)
 
 	sloppyQuorum := *o.SloppyQuorum || *o.ConvergenceTest
 
