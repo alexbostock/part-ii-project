@@ -139,7 +139,18 @@ func (c *Client) Get(key []byte) ([]byte, uint64, bool) {
 // Put picks a random database node as coordinator, sends a ClientWriteRequest,
 // and returns whether the transaction was successful (if possible). If the
 // transaction was successful, it returns a timestamp.
-func (c *Client) Put(key, val []byte) (resType PutResponse, timestamp uint64) {
+func (c *Client) Put(key, val []byte) (PutResponse, uint64) {
+	return c.put(key, val, false, 0)
+}
+
+// StrongPut is the same as Put, but will only write the value at the given
+// timestamp. If the next timestamp for the key is not the timestamp given,
+// the transaction is aborted.
+func (c *Client) StrongPut(key, val []byte, timestamp uint64) (PutResponse, uint64) {
+	return c.put(key, val, true, timestamp)
+}
+
+func (c *Client) put(key, val []byte, strong bool, ts uint64) (resType PutResponse, timestamp uint64) {
 	for i := 0; i < c.numAttempts; i++ {
 		id := <-idStream
 
@@ -150,14 +161,22 @@ func (c *Client) Put(key, val []byte) (resType PutResponse, timestamp uint64) {
 
 		dest := int(rand.Float64() * float64(c.numNodes))
 
+		var demuxKey packet.Messagetype
+		if strong {
+			demuxKey = packet.ClientStrongWriteRequest
+		} else {
+			demuxKey = packet.ClientWriteRequest
+		}
+
 		c.nodes[dest].Outgoing <- packet.Message{
-			Id:       id,
-			Src:      c.numNodes,
-			Dest:     dest,
-			DemuxKey: packet.ClientWriteRequest,
-			Key:      key,
-			Value:    val,
-			Ok:       true,
+			Id:        id,
+			Src:       c.numNodes,
+			Dest:      dest,
+			DemuxKey:  demuxKey,
+			Key:       key,
+			Value:     val,
+			Timestamp: ts,
+			Ok:        true,
 		}
 
 		select {

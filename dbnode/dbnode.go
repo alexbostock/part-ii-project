@@ -214,7 +214,7 @@ func (n *Dbnode) handleRequests() {
 			}
 
 			switch msg.DemuxKey {
-			case packet.ClientWriteRequest:
+			case packet.ClientWriteRequest, packet.ClientStrongWriteRequest:
 				if n.writeQuorumSize == 1 {
 					n.processLocalWrite(msg)
 				} else if n.elector.Leader() == n.id {
@@ -285,7 +285,7 @@ func (n *Dbnode) handleRequests() {
 						n.currentMode = coordinatingRead
 					}
 					n.continueProcessing()
-				case packet.ClientWriteRequest:
+				case packet.ClientWriteRequest, packet.ClientStrongWriteRequest:
 					n.currentMode = assemblingQuorum
 					n.continueProcessing()
 				case packet.NodeLockRequest:
@@ -320,7 +320,7 @@ func (n *Dbnode) handleRequests() {
 				switch msg.DemuxKey {
 				case packet.ClientReadRequest:
 					resType = packet.ClientReadResponse
-				case packet.ClientWriteRequest:
+				case packet.ClientWriteRequest, packet.ClientStrongWriteRequest:
 					resType = packet.ClientWriteResponse
 				default:
 					resType = packet.NodeLockResponse
@@ -335,7 +335,7 @@ func (n *Dbnode) handleRequests() {
 					Value:    msg.Value,
 					Ok:       false,
 				}
-			} else if msg.Id == n.currentTxid && (msg.DemuxKey == packet.ClientReadRequest || msg.DemuxKey == packet.ClientWriteRequest) {
+			} else if msg.Id == n.currentTxid && (msg.DemuxKey == packet.ClientReadRequest || msg.DemuxKey == packet.ClientWriteRequest || msg.DemuxKey == packet.ClientStrongWriteRequest) {
 				n.abortProcessing()
 			}
 		case <-n.stateQueryReq:
@@ -429,8 +429,24 @@ func (n *Dbnode) processLocalWrite(msg packet.Message) {
 		return
 	}
 
-	timestamp, _ := decodeTimestampVal(oldVal)
+	timestamp, oldVal := decodeTimestampVal(oldVal)
 	timestamp++
+
+	if timestamp != msg.Timestamp && msg.DemuxKey == packet.ClientStrongWriteRequest {
+		n.Outgoing <- packet.Message{
+			Id:        msg.Id,
+			Src:       n.id,
+			Dest:      msg.Src,
+			DemuxKey:  packet.ClientWriteResponse,
+			Key:       msg.Key,
+			Value:     oldVal,
+			Timestamp: timestamp,
+			Ok:        false,
+		}
+
+		return
+	}
+
 	newVal := encodeTimestampVal(timestamp, msg.Value)
 
 	txid := n.Store.Put(msg.Key, newVal)
@@ -840,6 +856,12 @@ func (n *Dbnode) continueProcessing() {
 				}
 			}
 
+			if n.clientRequest.DemuxKey == packet.ClientStrongWriteRequest && n.clientRequest.Timestamp != latestTimestamp+1 {
+				n.clientRequest.Timestamp = latestTimestamp + 1
+				n.abortProcessing()
+				return
+			}
+
 			value := encodeTimestampVal(latestTimestamp+1, n.clientRequest.Value)
 
 			n.uncommitedTxid = n.Store.Put(n.clientRequest.Key, value)
@@ -963,13 +985,14 @@ func (n *Dbnode) abortProcessing() {
 		}
 
 		n.Outgoing <- packet.Message{
-			Id:       n.clientRequest.Id,
-			Src:      n.id,
-			Dest:     n.clientRequest.Src,
-			DemuxKey: resType,
-			Key:      n.clientRequest.Key,
-			Value:    n.clientRequest.Value,
-			Ok:       false,
+			Id:        n.clientRequest.Id,
+			Src:       n.id,
+			Dest:      n.clientRequest.Src,
+			DemuxKey:  resType,
+			Key:       n.clientRequest.Key,
+			Value:     n.clientRequest.Value,
+			Timestamp: n.clientRequest.Timestamp,
+			Ok:        false,
 		}
 	case processingRead, processingWrite:
 		n.Outgoing <- packet.Message{

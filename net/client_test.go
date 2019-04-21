@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/alexbostock/part-ii-project/dbnode"
-	"github.com/alexbostock/part-ii-project/packet"
+	"github.com/alexbostock/part-ii-project/net/packet"
 )
 
 func TestDatabase(t *testing.T) {
@@ -19,7 +19,7 @@ func TestDatabase(t *testing.T) {
 	p := newPartitions(numNodes)
 
 	for i := 0; i < numNodes; i++ {
-		nodes[i] = dbnode.New(numNodes, i, timeout, false, quorumSize, quorumSize, false)
+		nodes[i] = dbnode.New(numNodes, i, timeout, false, quorumSize, quorumSize, false, true)
 		go startHelper(nodes[i].Outgoing, nodes, 0, 0, nil, p)
 	}
 
@@ -74,5 +74,18 @@ func TestDatabase(t *testing.T) {
 				t.Error("Strong consistency test failed")
 			}
 		}
+	}
+
+	res, ts := client.StrongPut(k, v, 10)
+	if res == Success {
+		t.Error("Strong write with wrong timestamp succeeded")
+	}
+	if ts != 0 && ts != 3 {
+		t.Error("Failed strong write returned wrong timestamp")
+	}
+
+	res, _ = client.StrongPut(k, v, 3)
+	if res != Success {
+		t.Error("Strong write failed")
 	}
 }

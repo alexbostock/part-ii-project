@@ -17,9 +17,10 @@ import (
 type Messagetype uint
 
 const (
-	_                             = iota
-	ClientReadRequest Messagetype = iota
-	ClientWriteRequest
+	_                                    = iota
+	ClientReadRequest        Messagetype = iota
+	ClientWriteRequest                   // Blind overwrite
+	ClientStrongWriteRequest             // Write at timestamp (or fail)
 	ClientReadResponse
 	ClientWriteResponse
 
@@ -81,6 +82,8 @@ func (m Messagetype) String() string {
 		return "clientReadRequest"
 	case ClientWriteRequest:
 		return "clientWriteRequest"
+	case ClientStrongWriteRequest:
+		return "clientStrongWriteRequest"
 	case ClientReadResponse:
 		return "clientReadResponse"
 	case ClientWriteResponse:
