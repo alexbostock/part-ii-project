@@ -145,7 +145,8 @@ func (c *Client) Put(key, val []byte) (PutResponse, uint64) {
 
 // StrongPut is the same as Put, but will only write the value at the given
 // timestamp. If the next timestamp for the key is not the timestamp given,
-// the transaction is aborted.
+// the transaction is aborted. Note that the next time is current timestamp+1
+// eg. oldVal, ts = Get(key); StrongPut(key, newVal, ts+1)
 func (c *Client) StrongPut(key, val []byte, timestamp uint64) (PutResponse, uint64) {
 	return c.put(key, val, true, timestamp)
 }
