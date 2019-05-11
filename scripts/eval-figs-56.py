@@ -1,5 +1,6 @@
 import math
 import matplotlib.pyplot as plt
+import os
 import re
 import sys
 
@@ -70,7 +71,12 @@ for p in params:
     fail_write_lows = []
     fail_write_highs = []
 
-    for rate in range(25, 251, 25):
+    if os.path.isfile(f'{sys.argv[1]}/350/{n}-{r}-{w}-0.txt'):
+        rate_range = range(25, 301, 25)
+    else:
+        rate_range = range(25, 251, 25)
+
+    for rate in rate_range:
         rates.append(rate)
 
         succ_read_latencies = []
@@ -117,15 +123,18 @@ for p in params:
         ax.scatter(r, succ_write_meds, label='Successful write transactions')
         ax.errorbar(r, succ_write_meds, yerr=(succ_write_lows, succ_write_highs), linestyle='None', capsize=5)
     else:
-        ax.set_yscale('log')
-
         r = mask(rates, fail_read_highs, fail_read_meds, fail_read_lows)
-        ax.scatter(r, fail_read_meds, label='Failed read transactions')
+        ax.scatter(r, fail_read_meds, label='Failed reads')
         ax.errorbar(r, fail_read_meds, yerr=(fail_read_lows, fail_read_highs), linestyle='None', capsize=5)
 
         r = mask(rates, fail_write_highs, fail_write_meds, fail_write_lows)
-        ax.scatter(r, fail_write_meds, label='Failed write transactions')
+        ax.scatter(r, fail_write_meds, label='Failed writes')
         ax.errorbar(r, fail_write_meds, yerr=(fail_write_lows, fail_write_highs), linestyle='None', capsize=5)
+
+    ax.set_yscale('log')
+
+    if sys.argv[1] == 'normal':
+        ax.set_ylim(10, 11000)
 
 for ax in [ax4, ax5, ax6, ax7]:
     ax.set_xlabel('Rate of transactions / second')
@@ -135,5 +144,5 @@ for ax in [ax0, ax4]:
     else:
         ax.set_ylabel('Latency (ms) (log scale)')
 
-ax3.legend(loc='upper right')
+ax2.legend(loc='upper left')
 plt.show()

@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import os
 import re
 import sys
 
@@ -42,7 +43,12 @@ for p in params:
     max_w_yields = []
     min_w_yields = []
 
-    for rate in range(25, 251, 25):
+    if os.path.isfile(f'p-{sys.argv[1]}/350/{n}-{r}-{w}-0.txt'):
+        rate_range = range(25, 351, 25)
+    else:
+        rate_range = range(25, 251, 25)
+
+    for rate in rate_range:
         rates.append(rate)
 
         read_yields = []

@@ -2,9 +2,6 @@
 # A script to parse transaction logs from stdin
 # eg. go run main.go | python3 parseOutput.py
 
-import pandas as pd
-import matplotlib.pyplot as plt
-
 import json
 
 import re
@@ -194,10 +191,3 @@ elif eventually_consistent:
     print('Output appears to be eventually consistent.')
 else:
     print('Output appears to be neither strongly consistent nor eventually consistent.')
-
-if len(jsons) > 1 and len(sys.argv) > 1:
-    messages = json.loads(jsons[0])
-    nodes = json.loads(jsons[1])
-
-    pd.DataFrame(nodes).transpose().plot(kind='area')
-    plt.show()

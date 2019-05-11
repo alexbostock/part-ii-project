@@ -21,6 +21,8 @@ node_recover_times = []
 partition_times = []
 partition_recover_times = []
 
+t = 0
+
 f = open(filename, 'r')
 
 for line in f:
@@ -32,6 +34,8 @@ for line in f:
         else:
             read_latencies.append(0)
 
+        t = int(m.group('end'))
+
     m = pw.match(line)
     if m != None:
         write_times.append(int(m.group('start')))
@@ -40,19 +44,21 @@ for line in f:
         else:
             write_latencies.append(0)
 
+        t = int(m.group('end'))
+
     m = node_fail_p.match(line)
     if m != None:
-        node_fail_times.append(read_times[-1])
+        node_fail_times.append(t)
 
     m = node_recover_p.match(line)
     if m != None:
-        node_recover_times.append(read_times[-1])
+        node_recover_times.append(t)
 
     if line == 'Partition created\n':
-        partition_times.append(read_times[-1])
+        partition_times.append(t)
 
     if line == 'Partition recovered\n':
-        partition_recover_times.append(read_times[-1])
+        partition_recover_times.append(t)
 
 def rolling_average(index, window, xs, ys):
     sum = 0

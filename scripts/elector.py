@@ -46,6 +46,8 @@ def stats(title, dir):
     print('Write yield:', round(100 * succ_writes / total_writes, 1))
     print('Median latency of successful reads (ms):', round(read_latencies[math.ceil(len(read_latencies) * 50/100)]))
     print('Median latency of successful writes (ms):', round(write_latencies[math.ceil(len(write_latencies) * 50/100)]))
+    print('95th percentile latency of successful reads (ms):', round(read_latencies[math.ceil(len(read_latencies) * 95/100)]))
+    print('95th percentile latency of successful writes (ms):', round(write_latencies[math.ceil(len(write_latencies) * 95/100)]))
     print('99th percentile latency of successful reads (ms):', round(read_latencies[math.ceil(len(read_latencies) * 99/100)]))
     print('99th percentile latency of successful writes (ms):', round(write_latencies[math.ceil(len(write_latencies) * 99/100)]))
     print()
