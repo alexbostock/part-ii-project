@@ -84,6 +84,7 @@ func (store *persistentstore) Put(key, val []byte) int {
 	if e != nil {
 		return 0
 	}
+	defer newPage.Sync()
 	defer newPage.Close()
 
 	written := false
@@ -146,6 +147,7 @@ func (store *persistentstore) putNew(key []byte, val []byte) int {
 	if e != nil {
 		return 0
 	}
+	defer newPage.Sync()
 	defer newPage.Close()
 
 	record := make([]byte, len(key)+len(val)+8)
