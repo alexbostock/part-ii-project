@@ -12,6 +12,11 @@
 \usepackage{longtable}
 \usepackage{dirtree}
 
+\lstset{
+  basicstyle=\scriptsize,
+  breaklines=true,
+}
+
 \raggedbottom                           % try to avoid widows and orphans
 \sloppy
 \clubpenalty1000%
@@ -47,8 +52,6 @@ Churchill College \\[5mm]
 
 \pagestyle{plain}
 
-% TODO: make sure this is good
-
 \chapter*{Declaration}
 
 I, Alex Bostock of Churchill College,
@@ -70,8 +73,8 @@ am content for my dissertation to be made available to the students and staff of
 Candidate Number:   & 2367B \\
 Project Title:      & \makecell[tl]{A Comparison of Consistency Models in \\ Distributed Database Systems}\\
 Examination:        & Computer Science Tripos -- Part II, 2019  \\
-Word Count:         & 11500 \\ % TODO: update this
-Line Count:         & 4967 \\
+Word Count:         & 11885 \\ % TODO: update this
+Line Count:         & 4969 \\
 Project Originator: & The dissertation author \\
 Supervisor:         & Dr John Fawcett                    \\ 
 \end{tabular}
@@ -80,15 +83,13 @@ Supervisor:         & Dr John Fawcett                    \\
 
 % Remember at most 100 words in each of the following
 
-% TODO: review these
-
 \section*{Original Aims of the Project}
 
-Design and implement two or more distributed database systems using quorum-based systems to provide different levels of consistency. Compare the performance of each system.
+Design and implement two or more distributed database systems using quorum-based algorithms to provide different levels of consistency. Compare the performance of each system.
 
 \section*{Work Completed}
 
-I implemented and evaluated two system, one using strict quorum assembly to provide strong consistency, and one using a sloppy quorum system to provide eventual consistency.
+I implemented and evaluated two systems, one using strict quorum assembly to provide strong consistency, and one using a sloppy quorum system to provide eventual consistency.
 
 \section*{Special Difficulties}
 
@@ -105,24 +106,26 @@ None
 
 \chapter{Introduction}
 
-% TODO: rewrite intro
-
-My project explores what availability and latency can be achieved while providing different consistency guarantees, particularly considering the requirements of large-scale social networking services. Applications like this have several important characteristics.
+Web apps are big business. For example, Facebook has over 1.5 billion daily active users across the world \cite{facebook}. Applications like this have several important characteristics.
 
 \begin{itemize}
 \item
 Databases need to process high volumes of ``read-mostly'' database transactions \cite{fox1999harvest} \cite{nunemaker}.
 
 \item
-Availability is important for business \cite{decandia2007dynamo}. Latency is also important (``for every additional second a page takes to load, 10 per cent of users leave'' \cite{clark_2018}).
+System availability is important for business \cite{decandia2007dynamo}. Latency is also important (``for every additional second a page takes to load, 10 per cent of users leave'' \cite{clark_2018}).
 
 \item
-Different services within the application require different consistency guarantees. For example, when serving a news feed to a user, high availability is much more important than strong consistency, but consistency may be much more important when determining whether a particular user has permission to see a post.
+Different services within the application require different consistency guarantees. In many cases, serving stale data is an acceptable trade-off in order to provide better availability or lower latency.
 
 \end{itemize}
 
-Web apps are big business. For example, Facebook has over 1.5 billion daily active users \cite{facebook}. There are $86,400$ seconds in a day, so the peak number of users active within a second must be at least $1,500,000,000/86,400 > 17,000$.
-Big web apps like this need big databases.
+Companies like Facebook need database systems which provide very good service to these applications, while maximising revenue and minimising infrastructure costs. My project looks at important choices when designing distributed database systems for large web applications, and demonstrates some important trade-offs.
+
+%Web apps are big business. For example, Facebook has over 1.5 billion daily active users \cite{facebook}. There are $86,400$ seconds in a day, so the peak number of users active within a second must be at least $1,500,000,000/86,400 > 17,000$.
+%Big web apps like this need big databases.
+%
+%My project explores what availability and latency can be achieved while providing different consistency guarantees, particularly considering the requirements of large-scale social networking services. Applications like this have several important characteristics.
 
 \section{Distributed Databases}
 
@@ -152,7 +155,7 @@ The strictest definition of availability says, as long as at least one database 
 
 There are many other types of consistency, most notably eventual consistency. An eventually consistent system may not appear consistent but, after some indefinite period of time without updates, will converge to a strongly consistent state. This can be combined with a variety of additional guarantees, each useful for different applications \cite{vogels_2008}.
 
-In practice, no real world system has perfect availability, as defined in the CAP theorem proof. Instead, it is usedul to measure the level of availability. One useful metric is yield: the proportion of transactions which are successful \cite{fox1999harvest}.
+In practice, no real world system has perfect availability, as defined in the CAP theorem proof. Instead, it is useful to measure the level of availability. One useful metric is yield: the proportion of transactions which are successful \cite{fox1999harvest}.
 
 In addition to availability, transaction latency is important. A system could have perfect availability but sometimes take hours to respond to a request, which is not useful in many applications. An alternative to the CAP theorem has been proposed: PACELC. This says that, in the presence of partitions, there is a trade-off of availability against consistency; otherwise, there is a trade-off of latency against consistency \cite{abadi2012consistency}.
 
@@ -173,7 +176,7 @@ Strong consistency is widely used, but is not necessary for every application \c
 
 An eventually consistent system does not provide strong consistency. If a write then a read are executed sequentially, there is no guarantee that the read will return the value just written; it may return a stale value, or not return a value. What eventual consistency does guarantee is, after some indefinite amount of time passes without any updates to the data store, the system will reach a strongly consistent state \cite{vogels_2008}. Note that the time required to reach consistency is not defined.
 
-Eventual consistency is useful for some applications. For example, when a user creates a social media post, it is not essential that the post is immediately visible to users everywhere in the world. after some time, the post should be visible everywhere. Also note that reaching that state in a very short time is desirable but not essential. It may be the case that a 1 second delay before a post is completely available is acceptable, although long delays are not ideal (although eventual consistency does not guarantee a bounded delay).
+Eventual consistency is useful for some applications. For example, when a user creates a social media post, it is not essential that the post is immediately visible to users everywhere in the world. after some time, the post should be visible everywhere. Also note that reaching that state in a very short time is desirable but not essential. It may be the case that a 1 second delay before a post is completely available is acceptable, although long delays are not ideal. Eventually consistent systems may be designed to sacrifice average latency to improve latency at a high percentile, providing better service for nearly all requests rather than only half of them.
 
 \subsection*{Session Guarantees}
 
@@ -197,8 +200,7 @@ Other guarantees can be provided independently of sessions \cite{terry2013}.
 \begin{description}
 \item{Consistent Prefix} means that every read sees the effects of a contiguous sequence of writes, beginning with the first write. The length of the sequence is not defined. This means that each read returns a snapshot of a previous state of the database (or the current state). Suppose an access control list is modified before sensitive data is written to a file. In this case, any client attempting to access the sensitive data must also access the latest access control list, otherwise a user may wrongly access the sensitive data. In this case, the consistent prefix guarantee is required. % Consistent prefix is global monotonic writes
 
-% TODO: rewrite this paragraph
-\item{Bounded staleness} specifies an upper bound on the staleness of any value read. Where eventual consistent systems converge to a strongly consistent state after an unspecified delay, bounded staleness limits the delay. DNS provides a bounded staleness guarantee; each DNS record has a named time to live (TTL). If a cached value is older than the time to live, the record should be queried. This enforces an upper bound on the time to propagate updated records. % TODO: make this better
+\item{Bounded staleness} specifies an upper bound on the staleness of any value read. Where eventually consistent systems converge to a strongly consistent state after an unspecified delay, bounded staleness limits the delay. DNS provides a bounded staleness guarantee; each DNS record has a named time to live (TTL). If a cached value is older than the time to live, the record should be queried. This enforces an upper bound on the time to propagate updated records. % TODO: make this better
 
 %means that the value returned by a return is either the most recent value, or was the most recent value at some point in a defined time frame. Where eventual consistency does not define the time to reach a consistent state, bounded staleness might guarantee that the system will reach a consistent state (if it is available) in at most 1 hour, for example. Suppose a social networking service needs to delete a video for legal reasons; with bounded staleness, the system could guarantee that the video was completely removed within 1 minute of the transaction. While strongly consistent may be more suitable, a bounded delay may be acceptable to avoid the performance cost of strong consistency.
 
@@ -215,9 +217,7 @@ $$W > N / 2$$
 
 $$R + W > N$$
 
-% TODO: sort this out
-
-$W$ is the number of nodes required for a write transaction. The first condition means that every write sees every other write: each write involves more than $N/2$ nodes chosen from the same set of $N$, so there must be at least one node involved in both of any two transactions. Transactions use a two-phase locking method, which means all nodes in a quorum are locked before the first lock is released. Locks enforce mutual exclusion, so a node will never simultaneously be a member of two quorums. This guarantees that there is a unique ordering of write transactions throughout the system, with each write transaction having a unique timestamp.
+$W$ is the number of nodes required for a write transaction. The first condition means that every write sees every other write: each write involves more than $N/2$ nodes chosen from the same set of $N$, so there must be at least one node involved in both of any two transactions. Locks enforce mutual exclusion, so a node will never simultaneously be a member of two quorums. With $W > N/2$, this guarantees that there is a unique ordering of write transactions throughout the system, with each write transaction having a unique timestamp.
 
 The first condition also guarantees a level of durability. Once a write has been committed, there are more than $N/2$ copies of the value written, so no data will be lost in the event of total failure of any $N/2$ database nodes.
 
@@ -227,11 +227,9 @@ $R$ is the number of nodes required for a read transaction. The second condition
 
 Weaker consistency guarantees can be provided using a quorum system with more relaxed constraints. We can achieve different performance and different consistency guarantees by imposing different constraints. Consider removing each from a strict quorum system.
 
-With both $W > N/2$ and $R + W > N$, the system is strongly consistent, as described in the previous section.
+With only $W > N/2$, the system provides the consistent prefix guarantee. This means that there is a total ordering on write transactions. By removing the constraint on $R$, any particular read is not guaranteed to see any particular write. If every write eventually reaches at least $N - R + 1$ nodes, the system is eventually consistent. This can be implemented easily; after a write transaction is atomically committed to $W$ replicas, it can be lazily propagated to other nodes. Given the total ordering on writes, every write can have a unique timestamp, so the system can easily avoid overwriting newer values with older ones, so each replica becomes monotonically more up-to-date over time.
 
-With only $W > N/2$, the system guarantees monotonic writes (globally rather than within a session). This means that there is a total ordering on write transactions. By removing the constraint on $R$, any particular read is not guaranteed to see any particular write. If every write eventually reaches at least $N - W + 1$ nodes, the system is eventually consistent. This can be implemented easily; after a write transaction is atomically committed to $W$ replicas, it can be lazily propagated to other nodes. Given the total ordering on writes, every write can have a unique timestamp, so the system can easily avoid overwriting newer values with older ones, so each replica becomes monotonically more up-to-date over time.
-
-With only $R + W > N$, the system is optimised for write operations. By removing the constraint $W > N/2$, there can be write conflicts. This requires some mechanism to reconcile such conflicts. If $W$ is small (as low as 1), the system provides a lower level of durability; data loss may occur if $W$ nodes suffer media failure. Small $W$ means that $R$ must be larger, which means read transactions are more expensive. This configuration may be useful for storing debug logs; frequent write operations are inexpensive, optimising for the common case assuming logs are infrequently read. Data loss in a debug log is probably not a critical issue, so worth sacrificing for better write availability.
+With only $R + W > N$, the system is optimised for write operations. By removing the constraint $W > N/2$, there can be write conflicts. This requires some mechanism to reconcile such conflicts. If $W$ is small (as low as 1), the system provides a lower level of durability; data loss may occur if $W$ nodes suffer media failure. Small $W$ means that $R$ must be larger, which means read transactions are more expensive. This configuration may be useful for storing debug logs; frequent write operations are inexpensive, optimising for the common case assuming logs are infrequently read. Data loss in a debug log is probably not a critical issue, so durability is worth sacrificing for better write availability.
 
 With no constraints on $R$ and $W$, the system provides very few guarantees. Writes can occur concurrently, so the quorum system cannot provide a total ordering of writes. Although it guarantees no consistency, an unconstrained quorum system can provide the best availability. In the most extreme case, $R = W = 1$, so the system is available as long as a single node is reachable.
 
@@ -248,14 +246,14 @@ Monotonic Reads & Always read from the same node, or $R + W > N$ to provide the 
 Monotonic Writes & Always write to the same node (assuming the node which receives a request is always the same node which coordinates the transaction)\\
 Read Your Writes & Both monotonic reads and monotonic writes\\
 Consistent Prefix & $W > N/2$\\
-Bounded Staleness & Add a cache to a strongly consistent system, with a TTL for each cache entry. If a cached value is older than the TTL, it must not be returned to a client without querying the main data store.\\
+Bounded Staleness & Add a cache to a strongly consistent system, with a TTL for each cache entry. Read transactions can be served from the cache, if the cache value is no older than the TTL. All other transactions must have strong consistency.\\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Goals}
+\section{Goals} \label{goals}
 
-I implemented two quorum systems with different consistency guarantees.
+I decided to implement two quorum systems with different consistency guarantees.
 
 The first uses strict quorum assembly to provide strong consistency.
 
@@ -297,25 +295,25 @@ Throughout the project, I followed a spiral model \cite{boehm1988spiral}.
 
 Initially, I followed a process like the waterfall method. Before beginning implementation, I researched the topic, set goals for the project, and wrote a design document. I then implemented my design and evaluated it.
 
-Once the basic system was complete, I iterated on my design. Based on results from testing, I made changes to my design, implemented changes, and evaluated them. In this stage, I could optimise my system with the benefit of hindsight, addressing some of the limitations in my original design.
+Once the basic system was complete, I iterated on my design. Based on results from testing, I made changes to my design, implemented changes, and evaluated them. In this stage, I could optimise my system with the benefit of hindsight, addressing some of the limitations in my original design. By following this process, I effectively managed risks; the most important deliverables were meeting my core success criteria, so I did this first, leaving non-essential extension work for later in the project, depending on time remaining.
+
+\section{Tools Used}
+
+My system is implemented using Go. Go is a fast, compiled language, making it ideal for low-level systems projects. It is also statically typed, and uses garbage collection, so it is easier to work with than C, a commonly-used language for systems programming. Go also has good support for concurrent programming, which proved useful in my project.
+
+To process and present results, I used Python. As a high level scripting language, this is useful for parsing output logs from my system. I used the Python library Matplotlib to plot graphs for my dissertation.
+
+I used Git for version control, with a remote copy of my Repository on Github. With use of branches, I could keep a working version of my system available for demostrations, while making changes on a separate branch.
+
+As additional backups, I used cloud services Backblaze and Google Drive. Each of these continually backed up all files related to my project. Every week, I verified that all of my backup services were functioning correctly, comparing the number of files stored in each copy and verifying that random files could be retrieved.
+
+I used Go Test for unit tests. I configured a reminder to run unit tests before committing changes to Git, to avoid introducing new bugs undetected.
 
 \section{Starting Point}
 
 Before starting the project, I had some experience using Go, having previously used it for a personal project (implementing a regular expression processor).
 
 My project builds on content in the IB course: Concurrent and Distributed Systems.
-
-\section{Tools Used}
-
-TODO
-
-Go
-Python
-Matplotlib
-git/Github
-Backblaze, Google Drive
-Backup verification
-go test
 
 \section{Data Model}
 
@@ -325,13 +323,13 @@ Given this, I built a distributed key-value store. Its data model is simple: a p
 
 \begin{itemize}
 \item
-\verb|Put(key, value)| either stores the given key and value in the system, or returns an error. This can also be used to delete a value, by storing the null value. If the transaction was completed successfully, Put also returns a unique timestamp associated with the value stored.
+\verb|Put(key, value)| either stores the given key and value in the system, or returns an error. If a value is already stored with the given key, that value is overwritten. This can also be used to delete a value, by storing the null value. If the transaction was completed successfully, Put also returns a unique timestamp associated with the value stored.
 
 \item
 \verb|Get(key)| either returns a value associated with the given key and that value's timestamp, or returns an error response.
 
 \item
-\verb|StrongPut(key, value, t)|, if the most recently stored value with the given key has timestamp \verb|t-1|, stores the given key-value pair. Otherwise, the transaction fails and returns the most recent timestamp associated with the key.
+\verb|StrongPut(key, value, t)|, if the most recently stored value with the given key has timestamp \verb|t-1|, stores the given key-value pair. As with Put, StrongPut overwrites any existing value. Otherwise, the transaction fails and returns the most recent timestamp associated with the key.
 
 \end{itemize}
 
@@ -345,10 +343,17 @@ My system does not support transactions which atomically read from or write to s
 
 Put requests blindly overwrite any existing values stored with the given key. This is not useful for all applications. The strongput method provides an alternative.
 
-% TODO: make the pseudocode better
-Assume a client goes \verb|Get; modify; Put|; there is a race condition if multiple clients do the same thing. A StrongPut fails if the value is overwritten by another client between the get and the put. StrongPut prioritises safety over throughput. If concurrent writes are rare (for example, only a single user has write permissions to social media posts), this is sufficient.
+Suppose a client's code looks like this:
 
-Properties like this of the database system should be considered when designing applications. For example, suppose a social network tracks which users have liked which posts. If an applications stores this data as a list of users indexed by posts, instances of concurrent writes to the same object are likely. If the same information is indexed by users, conflicts will only occur when a single user makes several operations in a short time, which is likely to be an uncommon case.
+\begin{verbatim}
+v = Get(k)
+v' = f(v)
+Put(k, v')
+\end{verbatim}
+
+There is a race condition if multiple clients do the same thing concurrently. In this case, StrongPut is appropriate. A StrongPut fails if the value is overwritten by another client between the get and the put, prioritising safety over throughput. If concurrent writes are rare (for example, only a single user has write permissions to social media posts), this is sufficient.
+
+Database system properties like this should be considered when designing applications. For example, suppose a social network tracks which users have liked which posts. If an applications stores this data as a list of users indexed by posts, instances of concurrent writes to the same object are likely. If the same information is indexed by users, conflicts will only occur when a single user makes several operations in a short time, which is likely to be an uncommon case.
 
 \section{Concurrent Writes}
 
@@ -373,9 +378,9 @@ My design has a number of important limitations, which are summarised here.
 The set of database nodes is fixed. Additional nodes cannot be added to the system, and existing ones cannot be removed. In practice, the ability to change the set of nodes is useful for incrementally scaling a system. Amazon's Dynamo achieves this by storing each value on a subset of the replicas in a cluster, using consistent hashing to limit the number of values which need to be relocated each time the number of replicas changes \cite{decandia2007dynamo}. Incremental scaling is outside the scope of my project.
 
 \item
-If a node fails permanently during the second phase of 2PC, its lock will never be released. With $W > N$, this prevents any subsequent write transactions from proceeding and requires the system to be manually un-jammed. This is the cost of consistency.
+If a node fails permanently during the second phase of 2PC, its lock will never be released. With $W > N/2$, this prevents any subsequent write transactions from proceeding and requires the system to be manually un-jammed. This is the cost of consistency.
 
-To deal with this issue, there is a choice between consistency and availability. Keeping $W > N$ keeps consistency, maintaining the monotonic writes or strong consistency guarantee. Removing the constraint means write conflicts can occur, but the system may remain available for writes.
+To deal with this issue, there is a choice between consistency and availability. Keeping $W > N/2$ keeps consistency, maintaining the monotonic writes or strong consistency guarantee. Removing the constraint means write conflicts can occur, but the system may remain available for writes.
 
 The problems could be mitigated. Applications can be composed of separate orthogonal mechanisms. For example, an authentication service and a service responsible for adverts can be built separately, with separate data stores. By using many individual services, partial unavailability (of only the advert service, for example) may not cause complete unavailability of the application \cite{fox1999harvest}. % fine-grained locking
 
@@ -386,8 +391,8 @@ If a node fails permanently, but not during 2PC, there is likely no immediate pr
 \item
 My system assumes that no node suffers from media failure. If a node fails then recovers during a 2PC, for example, it must recover its 2PC state from persistent storage and continue executing the transaction. In addition, my system assumes that values committed to a node's local storage are stored durably.
 
-The likelihood of media failure can be made very low with use of RAID, assuming that disk failures are independent. % TODO: citation
-In the case of correlated failures, due to a machine catching fire, for example, this is equivalent to a node failing permanently. In this case, some work will be required to ensure consistency with a new node.
+The likelihood of media failure can be made very low with use of RAID, assuming that disk failures are independent.
+In the case of correlated failures, due to a machine catching fire, for example, this is equivalent to a node failing permanently. In this case, manual intervention will be required to ensure consistency with a new node.
 
 In the worst case, media failure occurs undetected. This may cause an undetected consistency failure. In a production system, checksums must be used throughout a system to minimise the chance of undetected failures. This also applies to memory and network corruption \cite{chang2008bigtable}.
 
@@ -399,20 +404,17 @@ If multiple nodes simultaneously suffer from media failure, data may be lost. Th
 \chapter{Implementation}
 % 40%
 
-% TODO: polish all the writing in this chapter
-
 \section{Repository Overview}
 
-% TODO: make this sentence better
-My system is composed of several components, split between Go packages.
+My system is composed of several Go packages.
 
 \begin{description}
-  \item{\verb|dbnode|} is the main package, which runs on each database node. This includes responding to requests, executing transactions, and sharing stored values with other nodes. This package is responsible for both strict quorum and sloppy quorum variants. \verb|dbnode| contains two nested packages:
+  \item{\verb|dbnode|} is the core of the system, which runs on each database node. It is responsible for responding to requests, executing transactions, and sharing stored values with other nodes. This package is responsible for both strict quorum and sloppy quorum variants. \verb|dbnode| contains two nested packages:
 
   \begin{description}
     \item{\verb|elector|} is responsible for leadership elections.
 
-    \item{\verb|repeater|} provides session layer RPC functions: repeating requests until they are acknowledged and matching responses to requests.
+    \item{\verb|repeater|} provides session layer RPC functions: matching response to requests, and repeating requests until they are acknowledged.
 
   \end{description}
 
@@ -430,9 +432,9 @@ My system is composed of several components, split between Go packages.
 
 \end{description}
 
-% TODO: reference matplotlib
+My project makes use of Matplotlib for plotting graphs, in \verb|scripts|. All other code is written by me, from scratch.
 
-TODO: mention tests (and test tools)
+Throughout my repository, I have unit tests. Following the convention used by the Go Test tool, these have names of the form \verb|file_test.go|.
 
 \section{Data Storage}
 
@@ -460,7 +462,7 @@ Consistency in ACID means that all constraints on data are preserved. Note that 
 
 Isolation means that the system appears to execute all transactions sequentially. My store does not allow concurrent write transaction, so it has isolation without any further works.
 
-Durability means, once a write is committed, it persists, even after a system crash or power failure. This is achieved by writing all data before committing, then using an atomic commit operation; immediately after committing, the new value is completely written to the persistent data structure.
+Durability means, once a write is committed, it persists, even after a system crash or power failure. This is achieved by writing all data to a file before committing, calling \verb|fsync| to ensure it is written to disk, then using an atomic commit operation; immediately after committing, the new value is completely written to the persistent data structure.
 
 \subsection{In-Memory Store}
 
@@ -472,7 +474,7 @@ In order to make more realistic measurements of my system's performance, the in-
 
 \section{Quorum Assembly}
 
-My strongly consistent system uses strict quorum assembly to provide consistency. With $N$ nodes, there are two parameter $R$ and $W$, which are the read and write quorum sizes, respectively. Two constraints are imposed and $R$ and $W$:
+My strongly consistent system uses strict quorum assembly to provide consistency. With $N$ nodes, there are two parameter $R$ and $W$, which are the read and write quorum sizes, respectively. Two constraints are imposed on $R$ and $W$:
 
 $$W > N / 2$$
 
@@ -484,7 +486,7 @@ Lamport timestamps are monotonically increasing integers, which indicate the ord
 
 In my system, each node stores a Lamport timestamp for each database key. Where different nodes have conflicting values for the same key, the one with the greater clock value is most recent.
 
-Each Lamport clock value is a 64-bit unsigned integer. In order to ensure montonicity, these values must never overflow. This means that the system may fail if a single value is overwritten $2^64$ times. In practice, this will never happen (for example, at 100 writes per second, the time before overflow will be longer than five billion years).
+Each Lamport clock value is a 64-bit unsigned integer. In order to ensure monotonicity, these values must never overflow. This means that the system may fail if a single value is overwritten $2^64$ times. In practice, this will never happen (for example, at 100 writes per second, the time before overflow will be longer than five billion years).
 
 Since $W > N / 2$, there can never be multiple conflicting values with the same timestamp. This means that all writes are linearisable, so the system can always converge on a state where the most recent value persists.
 
@@ -608,7 +610,7 @@ If it has a newer value stored (higher timestamp), it returns the newer value to
 
 If it has an older value stored, it writes the new value and timestamp. If the value is stored successfully, it responds to the coordinator. On receipt of this, the coordinator can add the node to its set of nodes known to have the value. if the size of the set has reached the threshold, the coordinator can stop propagating the write.
 
-If the coordinator receives no response from a node, it just continues retrying. In order to guarantee eventual consistencyeventual consistcy the coordinator must continue retrying indefinitely until it reaches a termination condition.
+If the coordinator receives no response from a node, it just continues retrying. In order to guarantee eventual consistency, the coordinator must continue retrying indefinitely until it reaches a termination condition.
 
 \section{Leadership Election}
 
@@ -697,27 +699,9 @@ Each database node essentially receives messages from the network, and processes
 
 The node's local state machine is owned by a single goroutine responsible for the main loop. This loop must not block for a prolonged period time. Other goroutines within the node are responsible for blocking operations, including setting timers. When a transaction times out, for example, the goroutine responsible cannot update the main state machine; instead, it sends a message to the main loop, using a channel. The main loop receives the message and responds appropriately. Importantly, only the main loop can access the state machine, so there can be no race conditions, without using any locks. Care must be taken to ensure the main loop cannot block, but I found this easier in practice than micro-managing locks (as was necessary in early versions of my implementation).
 
-\section{Out-of-Order Delivery}
-
-Any message sent over a network has some unknown and unbounded latency (really unbounded \cite{imbriaco_2012}). This means that messages may be delivered out-of-order: if a node $A$ sends several messages to node $B$, the order in which they are sent is not always the order in which they arrive. This can cause difficult problems.
-
-What if a node is sent a lock request, then an unlock request very soon after?
-
-If the unlock arrives before the lock, the node may become locked forever.
-
-To fix this, each node stores all transaction IDs for which it has received an unlock request. If it subsequently receives a lock request with an already-seen ID, ignore it.
-
-This leads to each node accumulating a record of every transaction ever, so make it soft state.
-
-% TODO: more about the session layer? repeating requests?
-
 \section{Test Framework}
 
-[Currently copied from design doc, needs rewriting]
-
-% TODO: rewrite this
-
-My system will be built so that it interfaces closely with my test framework, using my RPC system. This will provide an ideal environment for integration testing and evaluating the system's performance. The architecture is based on two of Go's concurrency primitives: goroutines and channels.
+In order to test and evaluate my system, I implemented a test framework. This allows many database nodes to run on a single machine, connected by a simulated network. Running tests on a single machine is simple to set up, and makes collecting results easier, by logging all system output on a single machine. The framework's architecture os based on two of Go's concurrency primitives: goroutines and channels.
 
 Goroutines are similar to threads. Rather than using OS-level scheduling, the Go runtime has its own scheduler. Goroutines, unlike normal threads, have dynamically-sized stacks, between 8 kB and 1 GB \cite{gosrc}. Typically, threads have a stack size around 1MB. This means that the number of active threads is limited by memory usage. Using a smaller stack allows more threads, but limits the number of stack frames before a stack overflow error. Using dynamically-sized stacks, the number of active goroutines can be much larger.
 
@@ -725,18 +709,17 @@ Goroutines also have more efficient scheduling than threads in the OS. For examp
 
 Channels in Go are essentially thread-safe queue structures. These are ideal for producer-consumer patterns. Consumers can easily poll the queue, blocking until a value is available. My design uses channels to simulate network links.
 
-Each database node will run as its own goroutine. The system will support a fixed number of nodes, so each node will be identified by a unique integer. These will be assigned sequentially and remain constant, so they can be used as addresses in the simulated network. % TODO: discuss name servers (DNS, alternatives)
+Each database node runs as its own goroutine. My system supports a fixed number of nodes, so each node is identified by a unique integer. These integers are assigned sequentially and remain constant, so they can be used as addresses in the simulated network.
 
-For each database node, there will be two channels: one for incoming messages, and one for outgoing messages. A message may be a request from a (simulated) external client, a response to such a request, or a message used to coordinate nodes in the system. A message has 3 fields: source and destination addresses (integers), and a payload, the structure of which depends on the type of message. In order to handle a message, the network simulator only needs to inspect the source and destination addresses.
+Each database node has two channels for network messages, incoming and outgoing. Each message contains source and destination addresses and a payload, the structure of which depends on the type of message.
 
-Supporting each database node, there will be an additional goroutine responsible for delivering its outgoing messages. This will use the following algorithm:
+Supporting each database node, there is a goroutine responsible for delivering its outgoing messages. This uses the following algorithm:
 
 \begin{lstlisting}
 while true:
     message = outgoingMessages.poll() // Blocking deque
 
-    // Chance of packet loss, based on a given parameter
-    if (uniform random value in range [0,1]) < x:
+    if link from src to dest is unavailable:
         continue
 
     // Random latency
@@ -744,34 +727,22 @@ while true:
     sendAfterDelay(message, delay)
 \end{lstlisting}
 
-The \verb|sendAfterDelay| method spawns a new goroutine, which sleeps for the given time, then appends the message to the recipient's incoming queue. This means that the main loop will not block, so later messages will be delivered without uncontrolled delay.
+The \verb|sendAfterDelay| method spawns a new goroutine, which sleeps for the given time, then appends the message to the recipient's incoming queue. This means that the main loop will not block, so later messages will be delivered without uncontrolled delay. If \verb|sendAfterDelay| finds that the destination node's incoming buffer is full, the message is dropped.
 
-The main routine will be responsible for simulating clients. This includes generating requests, sending these requests to random database nodes, and recording responses. For each request, it should record the time from request to response (if a response was received). If a request times out without a response, this should also be recorded.
+In order to collect data, my test framework generates requests, simulating the traffic expected from a social network platform. Requests are Poisson-distributed, and $95\%$ of requests are read transactions. For each request, the framework logs request and response data, and timestamps. This allows logs to be parsed to test consistency guarantees and measure system availability.
 
-Once all requests have either timed out or been responded to, the main routine will terminate (thus halting the whole system). By configuring the number and type of tests and recording responses (as well as configuring the network properties, as described above), this can be used for both integration testing and evaluating the system's performance.
-
-% TODO: diagram
+To test how my system deals with failures, my framework generates failures. Network partitions are simulated by making random subsets of network links unavailable for some time. Individual node failures are simulated by sending control messages to nodes. Failed nodes remove all non-persistent state, and drop all incoming messages for the duration of the failure.
 
 \chapter{Evaluation}
 % 20% (with conclusions)
 
-\section{Goals}
+My project is about the trade-off of consistency against availability. I implemented two systems, which should each provide different levels of consistency. Section~\ref{consg} is about testing consistency. The remainder of this chapter measures availability and transaction latency.
 
-% TODO: words
+\section{Consistency Guarantees} \label{consg}
 
-At the beginning of the project, I set core and stretch goals. I achieved all of the core goals.
+In every test, I tested the output is consistent with the consistent guarantees it should provide. My strict quorum system should provide strong consistency, and my sloppy quorum system should provide eventual consistency with consistent prefix. Each guarantee is tested separately.
 
-I implemented everything required to achieve my core goals: two different quorum-based systems and a simulated network for testing and evaluation purposes. The next section describes consistency tests, which all passed.
-
-The Remainder of this chapter shows performance measurements. This includes availability (yield), latency, and time for the eventually consistent variant to converge on a consistent state.
-
-I also set stretch goals: optimising my implementation and implementing a third system to provide different consistency guarantees. Chapter 3 describes a leadership election, which provides a significant performance improvement compared to my original design. Due to time constraints, I did not implement a third system.
-
-\section{Consistency Guarantees}
-
-In every test, I tested the output is consistenct with the consistent guarantees it should provide. My strict quorum system should provide strong consistency, and my sloppy quorum system should provide eventual consistency with monotonic writes. Each guarantee is tested separately.
-
-In every test case I have, all the appropriate consistency tests have passed. As designed, where my system cannot provide the required consistency, it sacrifices availability. Systems with this property are useful to applications; an application developer can rely on every consistency guarantee being true, and accept imperfect availability. A system which is nearly always available is much better than one which is nearly always consistent (and may not indicate when it is not consistent).
+In every test case I have, all the appropriate consistency tests have passed. As designed, where my system cannot provide the required consistency, it sacrifices availability. Systems with this property are useful to applications; an application developer can rely on consistency guarantees, and accept imperfect availability.
 
 \subsection{Serialisability}
 
@@ -798,71 +769,84 @@ If a transaction $T$ happens-before another transaction $U$, linearisability als
 
 \subsection{Eventual Consistency}
 
-Eventual consistency is difficult to test, since it allows an indefinite amount of time to pass before the system converges on a strongly consistent state. A later section shows measurements of convergence time.
+Eventual consistency is difficult to test, since it allows an indefinite amount of time to pass before the system converges on a strongly consistent state. Section~\ref{convs} shows measurements of convergence time.
 
 \section{Availability Without Failures}
 
-\begin{figure}[ht!]
+\begin{figure}[hbt]
 \centerline{\includegraphics[width=\paperwidth]{figs/eval-fig-1.png}}
-\caption[Yield in basic tests with 3 and 5 database nodes, using strict and sloppy quorum]{Yield (proportion of transactions which are successful) in tests with 3 or 5 nodes, without any node or network failures. The rate of requests is varied in each set of tests. The plots show mean values, with error bars showing maximum and minimum.}
+\caption{Yield in tests  without any node or network failures is higher with sloppy quorum and when $R = 1$. As the rate of requests is increased, yield declines rapidly. Error bars show maximum and minimum values.}
 \label{yield35nofail}
 \end{figure}
 
 I first tested the system without any network or node failures. Every network message is delivered reliably (with variable latency). Each test uses 3 or 5 database nodes ($N \in \{3, 5\}$), with various read and write quorum sizes ($R$ and $W$). Tests with $R + W > N$ use strict quorum, and others use sloppy quorum. Each test involves 10,000 client requests, of which $95\%$ are reads, and is repeated 10 times.
 
-In each test, I measured read and write yield (the proportions of read and write requests which were successfully executed), and latency of successful transactions (time from client request sent to response received by client).
+In each test, I measured read and write yield (the proportions of read and write transactions which were successfully executed), and latency of successful transactions (time from client request sent to response received by client).
 
 \begin{figure}[ht]
 \centerline{\includegraphics[width=\paperwidth]{figs/eval-fig-5.png}}
-\caption{Latency of successful transaction in tests with 3 or 5 nodes, with no node or network failures. Each test is repeated 10 times. The plots show median latencies, with error bars showing 1st and 99th percentiles, plotted on a log-scale.}
+\caption{Latency of successful transactions is much higher with higher request rate (note the log scale). With $R = 1$, latency of reads is not affected by request rate. Errors bars show 1st and 99th percentiles.}
 \label{latency35nofail}
 \end{figure}
 
-Tests with $R = 1$ have much better performance, especially for reads. In every test where $R = 1$, read yield was $100\%$. Whenever a node receives a read request, it can immediately respond without involving any other nodes, then immediately become available for other transactions. With no failures, every request reaches an available node, so every read request succeeds.
+In tests with read quorum size $R = 1$, read yield was $100\%$ in every case (figure~\ref{yield35nofail}). Latency of read transactions in those cases is not affected by the rate of requests (figure~\ref{latency35nofail}). There are two reasons for this.
 
-Read requests also have lower latency with $R = 1$, and that latency is not affected by varying the rate of transactions. % TODO: a stats test
-Reads with $R > 1$ take at least 1 RTT longer than with $R = 1$, as shown in figure~\ref{r1}. In the case when other nodes are busy with other transactions, they take longer to respond. This results in increased latency, and increased chance of failure (so lower yield).
+In any read transaction, a request is sent to a single node. On receipt of a read request, a node must assembly a quorum with $R-1$ other nodes. This adds latency of at least one RRT (waiting for the node which takes longest to respond). When $R = 1$, no other nodes need to be contacted. The procedure is thus much simpler: query local storage and return to the client.
 
-For read-heavy applications, $R = 1$ gives better availability for reads and writes, measured by both yield and latency.
+In my system, each database node is bad at multitasking. At any time, each node is in a single mode, such as coordinating write, assembling quorum, or idle. A node will never process multiple transactions concurrently (for example, coordinating a read while participating in a write quorum), even if these transactions would not conflict. With $R = 1$, reads can be responded to immediately, without changing mode, but with $R>1$, read requests must be queued until the node becomes idle. This increases latency, and increases the chance of a request failing by timing out.
 
-In each set of tests, figure~\ref{yield35nofail} clearly shows the maximum rate at which write yield is higher than $95\%$. This indicates the maximum throughput of the system with each configuration. At higher rates than the maximum throughput, yield declines and latency increases rapidly. % TODO: is this true? why?
-This property might be improved by rate-limiting requests; by keeping the rate of requests lower than the maximum throughput, the number of successful transactions is increased. Given the distributed nature of the system, rate-limiting may be difficult to implement; a key benefit of available is the fact that any node can receive requests; adding a simple rate-limiter would introduce a single point-of-failure, negating this advantage.
+With $R = 1$, my system also provides better yield and latency for write transactions. This is also due to bad multitasking. With $R = 1$, no nodes are busy coordinating read transactions, which would block them from participating in write quorums, so write coordinators are more likely to assemble quorums successfully.
 
-TODO: statistical tests: does sloppy quorum have better yield? does sloppy quorum have lower latency?
+%Tests with $R = 1$ have much better performance, especially for reads. In every test where $R = 1$, read yield was $100\%$. Whenever a node receives a read request, it can immediately respond without involving any other nodes, then immediately become available for other transactions. With no failures, every request reaches an available node, so every read request succeeds.
 
-\begin{figure}[ht]
-\centerline{\includegraphics[width=\linewidth]{figs/r1.png}}
-\caption{Two read transactions, with different read quorum sizes. Read latency is significantly reduced when the read quorum size ($R$) is 1.}
-\label{r1}
-\end{figure}
+%Read requests also have lower latency with $R = 1$, and that latency is not affected by varying the rate of transactions.
+%Reads with $R > 1$ take at least 1 RTT longer than with $R = 1$. In the case when other nodes are busy with other transactions, they take longer to respond. This results in increased latency, and increased chance of failure (so lower yield).
+
+%For read-heavy applications, $R = 1$ gives better availability for reads and writes, measured by both yield and latency.
+
+In every case, at high request rates, yield declines very quickly. Importantly, system throughput gets worse under high load. For example, if yield was $100\%$ at 100 requests per second and $66\%$ at 150 requests per second, the system could always guarantee a throughput of 100 transactions per second. My system does not have this property.
+
+In order to mitigate this problem, the wider system architecture needs to be considered. To guarantee a level of throughput, a rate-limiter could be used to limit the number of requests sent to the database (and maybe the distribution of different types of request).
+
+%In each set of tests, figure~\ref{yield35nofail} clearly shows the maximum rate at which write yield is higher than $95\%$. This indicates the maximum throughput of the system with each configuration. At higher rates than the maximum throughput, yield declines and latency increases rapidly.
+%This property might be improved by rate-limiting requests; by keeping the rate of requests lower than the maximum throughput, the number of successful transactions is increased. Given the distributed nature of the system, rate-limiting may be difficult to implement; a key benefit of available is the fact that any node can receive requests; adding a simple rate-limiter would introduce a single point-of-failure, negating this advantage.
+
+%\begin{figure}[ht]
+%\centerline{\includegraphics[width=\linewidth]{figs/r1.png}}
+%\caption{Two read transactions, with different read quorum sizes. Read latency is significantly reduced when the read quorum size ($R$) is 1.}
+%\label{r1}
+%\end{figure}
+
+\newpage
 
 \section{Availability With Failures}
 
-\begin{figure}[ht!]
+\begin{figure}[hbt]
 \centerline{\includegraphics[width=\paperwidth]{figs/eval-fig-2.png}}
-\caption{Yield of tests with 3 or 5 nodes, with random node and network failures. Plots show mean from 10 tests, with error bars showing maximum and minimum.}
+\caption{Yield in tests with random node and network failures follows similar trends to yield without failures, but with more noise. Error bars show maximum and minimum values.}
 \label{yield35normal}
 \end{figure}
 
 I repeated the tests from the previous section with random node and network failures. Failures are Poisson-distributed, with on average 1 failure per 100 seconds. Each failure is either a node failure (a random node stop responding to requests and loses all non-persistent state), or a partition (a random set of network links stops working). Every failure recovers after a random delay (average 10 seconds).
 
-Yield trends are the same as before, but with much more noise (figure~\ref{yield35normal}).
+Note that this is a high rate of failures compared to a typical real world system. A system is likely to run for many days without any failures (like in the previous tests), but occasionally suffer from single failures or several failures together. Collecting data based on real world usage would require running systems for extended periods of time. In my tests, the distribution of failures is the same in every case, so my results can be used to compare different system configurations.
 
-Next look at particular tests in detail to understand big error bars in both cases. % TODO
+Read and write yield follow similar trends to tests without failures, but with more noise (figure~\ref{yield35normal}). In most cases, the average performance is slightly worse than before, and worst case yield and 99th percentile latency are much worse.
+
+With node and network failures, some failed transactions are inevitable. Every client request is sent to a random database node. If that node or a network link connecting it to the client is unavailable, the transaction will always fail. With $N$ database nodes, at a time when one node has failed, $\frac{1}{N}$ transactions are expected to fail.
+
+These issues could be mitigated with a load balancing service. This could use soft state to approximate the set of reachable nodes at any time. Such a service should be designed carefully to avoid creating a single point of failure, which would negate a key benefit of distributed systems.
+
+Each database node could also be extended to predict which of its peers are most likely to respond to a request. In the case of a partition in which a node can still reach enough peers to form a quorum, it could successfully execute more transactions by spending less time waiting for unreachable nodes.
 
 \begin{figure}[ht]
 \centerline{\includegraphics[width=\paperwidth]{figs/eval-fig-6.png}}
-\caption{Latency of successful transaction in tests with 3 or 5 nodes, with random node and network failures. Each test is repeated 10 times. The plots show median latencies, with error bars showing 1st and 99th percentiles, plotted on a log-scale.}
+%\caption{Latency of successful transaction in tests with 3 or 5 nodes, with random node and network failures. Each test is repeated 10 times. The plots show median latencies, with error bars showing 1st and 99th percentiles, plotted on a log-scale.}
+\caption{In tests with random failures, the 99th percentile latency is very high compared to tests without failures (shown in figure~\ref{latency35nofail}). Median and 1st percentile latency follow the same trends as in tests without failures.}
 \label{latency35normal}
 \end{figure}
 
-Mean latency of successful transactions is the same as without failures. % TODO: test
-Most of the time, there is no failure.
-
-99th percentile is much higher. % TODO: test
-Some write transactions block the system when a failure occurs during 2PC. Other requests sit in queues until after the failure has recovered, resulting in much higher latency.
-
-In general, high latency is undesirable but better than failure. Is there some application which might prefer to fail fast? % TODO
+In many cases, 99th percentile latency of successful transactions is very high in tests with failures, often several seconds. This means, in addition to many transactions failing in the presence of failures, at least $1\%$ of successful transactions have greatly increased latency. In a social network application, high latency means poor user experience, but is still better than failed requests. Some applications may be more sensitive to high latency.
 
 \section{Failure Modes}
 
@@ -873,11 +857,11 @@ In general, high latency is undesirable but better than failure. Is there some a
 \label{single-test-normal}
 \end{figure}
 
-When no part of the system has failed, yield is optimal. At low enough transaction rates (depending the on number of nodes and quorum sizes), yield is $100\%$ for both reads and writes. This is shown in figure~\ref{single-test-normal}, alongside yield during partitions. In one partition, yield drops to around $60\%$. With 5 nodes, this indicates that 2 nodes were unreachable by clients (since my system use no load-balancing). In a second partition, read yield remains at $100\%$. This indicates that all nodes are reachable by clients. With read quorum size 1, only a single node is involved in each read. Write yield is much lower, indicating that, in some case, nodes failed to assemble quorums.
+When no part of the system has failed, yield is optimal. At low enough transaction rates (depending the on number of nodes and quorum sizes), yield is $100\%$ for both reads and writes. This is shown in figure~\ref{single-test-normal}, alongside yield during partitions. In one partition, yield drops to around $60\%$. With 5 nodes, this indicates that 2 nodes were unreachable by clients. In a second partition, read yield remains at $100\%$. This indicates that all nodes are reachable by clients. With read quorum size 1, only a single node is involved in each read. Write yield is much lower, indicating that, in some case, nodes failed to assemble quorums.
 
 \begin{figure}[htb]
 \centerline{\includegraphics[width=\linewidth]{figs/culprit.png}}
-\caption{Rolling average yield over time for a particular test case, with 5 nodes, read quorum size 1, write quorum size 2. Magenta lines indicate single node failures, and cyan lines indicate recoveries. This test was run in an older version of my system, in which nodes failing while assembling quorums would fail permanently. This failure mode occurs if a node fails during a two-phase commit.}
+\caption{Rolling average yield over time for a particular test case, with 5 nodes, read quorum size 1, write quorum size 2. Magenta lines indicate single node failures, and cyan lines indicate recoveries. This test was run in an older version of my system, in which nodes failing while assembling quorums would fail permanently. This failure mode occurs if a node permanently fails during a two-phase commit.}
 \label{culprit}
 \end{figure}
 
@@ -892,10 +876,12 @@ Even with fine-grained locking, if $W = N$ (as with strict quorum and $R = 1$), 
 
 \end{itemize}
 
-Google's Spanner has an interesting solution to the limitations of 2PC. Since 2PC requires every member to be available, Spanner has each member be a Paxos group, rather than a single node. This means that, as long as a quorum of nodes in each group is available, two-phase commits can be completed \cite{45855}.
+These issues reflect the main limitation of 2PC: it is a blocking protocol. During the commit phase, every node in a quorum must be available.
+Google's Spanner has an interesting solution this limitation. Each member of a 2PC group, rather than a single node, is a Paxos group. A transaction can be committed as long as a majority of nodes in each group is available, rather than requiring every node to be available \cite{45855}.
 
+\newpage
 
-\section{Eventual Consistency Convergence Time}
+\section{Eventual Consistency Convergence Time} \label{convs}
 
 \begin{table}[h!]
 \centering
@@ -934,9 +920,9 @@ Google's Spanner has an interesting solution to the limitations of 2PC. Since 2P
 \label{convergencetimes}
 \end{table}
 
-These tests are under the same conditions as before, 10 repeats for each set of parameters. Whenever a write transaction is committed or a node writes a new value from background write propagation, a timestamp is logged. The latency for each write transaction is the time from commit until $N - R + 1$ nodes have a copy of the value, so that every read request received after that delay is guarateed to return the most recent value.
+These tests are under the same conditions as before, with 10 repeats for each set of parameters. Whenever a write transaction is committed or a node writes a new value from background write propagation, a timestamp is logged. The latency for each write transaction is the time from commit until $N - R + 1$ nodes have a copy of the value, so that every read request received after that delay is guaranteed to return the most recent value.
 
-Note that this latency is not from the clients point of view. A value is committed before a client response message is sent, and there is latency between a read request being sent and the read being processed by a node.
+Note that this latency is not from the client's point of view. A value is committed before a client response message is sent, and there is latency between a read request being sent and the read being processed by a node.
 
 In my tests, I assumed network latency between any pair of nodes is normally distributed, with mean $10$ ms. With this, if the convergence time is less than $20$ ms at the $n$th percentile, it is more likely than not that $n\%$ of reads will read the latest value (so expect $n / 2 \%$ will read the latest). This assumes the worst case, when a read request is sent immediately after receiving a write response.
 
@@ -948,66 +934,79 @@ These cases are also when eventual consistency is most useful; one data centre c
 
 In the common case, convergence times are good. For a few percent of writes, convergence times are less good, due to failures. The stale values due to single-node failures demonstrate the main drawback of $R = 1$.
 
-My system could be modified to provide a bounded staleness guarantee. This would require each node to be aware when values are out-of-date, which could be acheived with a heartbeat. Currently, nodes exchange values when they have update; for bounded staleness, nodes would also need to exchange messages indicating that they have no new changes. If a node has not heard from a critical number of other nodes for some period of time, it must assume its store is out-of-date, and become unavailable for bounded staleness requests.
+Convergence time depends on the difference between $N - R + 1$ (the number of nodes which must eventually receive an update) and $W$ (the number of nodes to which an update is committed). This can be seen at every percentile where $N = 5$, $W = 3$, and $R \in \{1, 2\}$ in table~\ref{convergencetimes}. I have already found that $R = 1$ gives better yield and latency. This demonstrates a trade-off: higher $R$ gives shorter convergence times, while lower $R$ gives better availability. If the system was modified to guarantee bounded staleness, this trade-off could be seen directly as a trade-off of consistency against availability, since nodes which have not received updated values (or notification that there are no new updates) for some time must make values unavailable.
 
-A bounded staleness with a bound of $10$s of milliseconds should provide at least $95\%$ the yield of normal reads. In practice, this will be higher, since nodes with stale values will be correlated with nodes which are unavailable at any given time. The cost of this is additional network load exchanging heartbeats, which would scale quadratically with the number of nodes.
+%My system could be modified to provide a bounded staleness guarantee. This would require each node to be aware when values are out-of-date, which could be acheived with a heartbeat. Currently, nodes exchange values when they have update; for bounded staleness, nodes would also need to exchange messages indicating that they have no new changes. If a node has not heard from a critical number of other nodes for some period of time, it must assume its store is out-of-date, and become unavailable for bounded staleness requests.
+
+%A bounded staleness with a bound of $10$s of milliseconds should provide at least $95\%$ the yield of normal reads. In practice, this will be higher, since nodes with stale values will be correlated with nodes which are unavailable at any given time. The cost of this is additional network load exchanging heartbeats, which would scale quadratically with the number of nodes.
 
 \section{More Database Nodes}
 
 \begin{figure}[ht]
 \centerline{\includegraphics[width=\paperwidth]{figs/big-n-yield.png}}
-\caption{TODO}
+\caption{Yield with large numbers of nodes is better with sloppy quorum (bottom row) than with strict quorum (top row). As in previous tests with read quorum size 1, read yield is very close to $100\%$ regardless of request rate.}
 \label{big-n-yield}
 \end{figure}
 
-Figure~\ref{big-n-yield} shows yield for tests with large numbers of nodes (10, 40, 70, 100), testing strict and sloppy quorum for each.
+Tests with large numbers of nodes, with $R = 1$ in every case, show better write yield with sloppy quorum than strict quorum (figure~\ref{big-n-yield}). With $R = 1$, strict quorum requires that $W = N$. This means that a single node failure makes the whole system unavailable for writes. With more nodes, the chance of a single node failure is greater.
 
-The strict quorum tests appear to be better at higher rates than the previous tests. If a single node fails and clients requests are uniformly distributed between nodes (as they are in all my tests (so far)), the chance of a request reaching a node is greater when the number of nodes is larger. I didn't scale the number of failures to the number of nodes. Partitions will affect more nodes, but failures occur at the same rate.
+Read yield with more nodes is better than with fewer nodes. In this way, more nodes are better at tolerating single node failures. With every request sent to a random node, the chance of a request being sent to any particular node is smaller when the number of nodes is larger. This reduces the chance of a request being sent to an unreachable node, which always means a failed transaction.
 
-A failure affecting a small number of nodes affect proportionally less of the system.
+Tests with more nodes do not show significantly better throughput, indicating that this is not the best way to scale my system. A better way to scale would be to separate the concept of nodes and replicas: make each node responsible for a subset of all keys. For example, with 100 nodes, have 5 nodes responsible for each key. This could be done simply by deploying several smaller clusters. If the system was to support atomic transactions across multiple keys, closer integration between the clusters could be advantageous.
 
-\begin{figure}[ht]
-\centerline{\includegraphics[width=\paperwidth]{figs/big-n-latency.png}}
-\caption{TODO}
-\label{big-n-latency}
-\end{figure}
+The advantages of more replicas are not shown clearly by my tests. With more data replication, the system provides very high durability. For example, with $100$ nodes, write transactions are committed to at least $51$ nodes. This means no committed data will be lost if $50$ nodes suffer media failure. While useful, the marginal gain is small. With 5 replicas geographically distributed, the chance of 3 machines simultaneously suffering media failure is already low. In most cases, using many more machines is not worth the cost.
 
-Figure~\ref{big-n-latency} shows latency of successful transactions in the same set of tests.
+A system with more nodes could also provide lower latency, if nodes are distributed across the world. If a cluster contains nodes on every continent and $R = 1$, clients across the world could query nodes which are geographically closer and read values with much lower latency (at the cost of more expensive writes, with intercontinental 2PC). With more nodes, the average distance from clients to database nodes can be made even lower. It would be interesting to test how well such a system would work in practice.
 
-As with previous tests where $R = 1$, read latency is very flat. The maximum write latencies are higher: greater chance of a partition affecting a 2PC, which causes the worst case latency when the whole system blocks on a write transaction.
+%\begin{figure}[ht]
+%\centerline{\includegraphics[width=\paperwidth]{figs/big-n-latency.png}}
+%\caption{With large numbers of nodes, 1st, 50th and 99th percentile latency of successful transactions follow the same trends as with small numbers of nodes (figure~\ref{latency35normal}). 99th percentile is lower with sloppy quorum (bottom row) than with strict quorum (top row).}
+%\label{big-n-latency}
+%\end{figure}
+%
+%Figure~\ref{big-n-latency} shows latency of successful transactions in the same set of tests.
+%
+%As with previous tests where $R = 1$, read latency is very flat. The maximum write latencies are higher: greater chance of a partition affecting a 2PC, which causes the worst case latency when the whole system blocks on a write transaction.
 
-% TODO: reference the appendix
-An appendix shows convergence times for tests with large numbers of nodes. As with smaller numbers of nodes, 99th percentile latency has high variance, but 95th percentile is consistent.
+Appendix~\ref{convt} shows convergence times for tests with large numbers of nodes. As with smaller numbers of nodes, 99th percentile latency has high variance, but 95th percentile is consistently lower than 25 milliseconds.
 
-95th percentile latency is higher with more nodes. % TODO: justify this claim
-
-% TODO: eval-fig-4, showing a nofail test in detail, justifying why yield is imperfect
-
-% TODO: Comment on how common node failures are \cite{45855}
-
-% TODO: distance matrix, heuristic, test
-
-% TODO: test eventual consistency + monotonic reads \cite{terry2013}
-
-% TODO test with retries
-
-% TODO: test different transaction sizes
+At every percentile, convergence time is higher with more nodes. This is because every update must be propagated to $N - R + 1$ nodes. This is another argument against using a large numbers of nodes in a single cluster.
 
 \chapter{Conclusions}
 
-% TODO
+My project was a success. I have completed all of the core goals set in section~\ref{goals}. I implemented two different systems, tested that each one provides the correct consistency guarantees, and evaluated their performance. I also completed some extension work, improving my original design by adding a leadership election, which greatly improving performance.
 
-With hindsight, my design has some notable limitations which were never fixed: global locking and poor multi-tasking. Neither of these issues were fixed, since doing so would require significant refactoring. Had they been identified at an earlier stage, this would not have been a problem.
+My results have demonstrated important trade-offs in design of distributed systems. My eventually consistent system provides better availability than my strongly consistent system, especially with a large number of database nodes. By changing the read quorum size, a system can be optimised to lower latency of read transactions, or minimise the time for an eventually consistent system to converge on a strongly consistent state. I have also shown the importance of other parts of a system, such as load balancing and rate limiting, to mitigate the impact of a database system's limitations. 
 
-My system uses global locking, rather separate locks for each key stored. Along with the quorum constraint $W > N/2$, this means that there can never be concurrent write transactions, even when writing to different keys. This means that my system provides external consistency, a stronger guarantee than strong consistency (TODO: refer to explanation), but at the cost of performance.
+This demonstrates the benefits of choosing and configuring a database system to closely match an application's requirements. Systems can be designed to provide better availability and lower latency, which is good for revenue, while making the most effective use of networks and servers, minimising infrastructure costs.
 
-This limitation amplifies the effect a permanent node failure during 2PC: a single node failure can make the system completely for writes. With fine-grained locking, such a failure would affects to keys which were being modified at the time of failure.
+\section*{Further Work}
 
-While external consistency is a useful guarantee, global locking is not the best way of providing. Google's Spanner provides external consistency by use of GPS clocks in every data centre. Along with a highly-available private global network, this provides very high availability and a very high level of consistency \cite{45855}. In chapter 1, I claimed that most web applications require partition tolerance, so have to sacrifice either consistency or availability. Spanner demonstrates an exception to this; the trade-off it requires is the cost extensive global infrastructure.
+My project has compared systems providing two different levels of consistency. It would be interesting to consider more, perhaps including a weaker form of eventually consistency with write conflicts, or a system which guarantees bounded staleness.
 
-Each database node in my system does a poor job of handling multiple requests simultaneously. The main state in each nodes is implemented as a state machine, with each node always in a single state. For example, a node might be idle, coordinating a read or write transaction, participating in a two-phase commit, etc. This results in requests failing when they could succeed without affecting consistency guarantees. For example, a node participating in a write transaction will not participate in another write transaction's quorum until the first transaction is done. If each transaction writes to a different key, this could be done safely.
+My project considered the needs of web applications such as social networks, in which the vast majority of requests are read operations. It would be interesting to consider systems optimised for different uses, such as a system optimised for fast write transactions.
 
-To fix this, each node would need to replicate the state machine. Each node would have a set of state machines, indexed by database keys (omitting all keys for which the current state is idle, to minimise memory usage). Assuming no key is accessed too frequently, the system throughput would be limited by hardware, either network bandwidth or disk throughput.
+% TODO: improvements, private global network
+
+%At the beginning of the project, I set core and stretch goals (section~\ref{goals}). I achieved all of the core goals.
+%
+%I implemented everything required to achieve my core goals: two different quorum-based systems and a simulated network for testing and evaluation purposes. The next section describes consistency tests, which all passed.
+%
+%The Remainder of this chapter shows performance measurements. This includes availability (yield), latency, and time for the eventually consistent variant to converge on a consistent state.
+%
+%I also set stretch goals: optimising my implementation and implementing a third system to provide different consistency guarantees. Chapter 3 describes a leadership election, which provides a significant performance improvement compared to my original design. Due to time constraints, I did not implement a third system.
+
+%With hindsight, my design has some notable limitations which were never fixed: global locking and poor multi-tasking. Neither of these issues were fixed, since doing so would require significant refactoring. Had they been identified at an earlier stage, this would not have been a problem.
+%
+%My system uses global locking, rather separate locks for each key stored. Along with the quorum constraint $W > N/2$, this means that there can never be concurrent write transactions, even when writing to different keys. This means that my system provides external consistency, a stronger guarantee than strong consistency (TODO: refer to explanation), but at the cost of performance.
+%
+%This limitation amplifies the effect a permanent node failure during 2PC: a single node failure can make the system completely for writes. With fine-grained locking, such a failure would affects to keys which were being modified at the time of failure.
+%
+%While external consistency is a useful guarantee, global locking is not the best way of providing. Google's Spanner provides external consistency by use of GPS clocks in every data centre. Along with a highly-available private global network, this provides very high availability and a very high level of consistency \cite{45855}. In chapter 1, I claimed that most web applications require partition tolerance, so have to sacrifice either consistency or availability. Spanner demonstrates an exception to this; the trade-off it requires is the cost extensive global infrastructure.
+%
+%Each database node in my system does a poor job of handling multiple requests simultaneously. The main state in each nodes is implemented as a state machine, with each node always in a single state. For example, a node might be idle, coordinating a read or write transaction, participating in a two-phase commit, etc. This results in requests failing when they could succeed without affecting consistency guarantees. For example, a node participating in a write transaction will not participate in another write transaction's quorum until the first transaction is done. If each transaction writes to a different key, this could be done safely.
+%
+%To fix this, each node would need to replicate the state machine. Each node would have a set of state machines, indexed by database keys (omitting all keys for which the current state is idle, to minimise memory usage). Assuming no key is accessed too frequently, the system throughput would be limited by hardware, either network bandwidth or disk throughput.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % the bibliography
@@ -1018,9 +1017,9 @@ To fix this, each node would need to replicate the state machine. Each node woul
 % the appendices
 \appendix
 
-\chapter{Eventual Consistency Convergence Times}
+\chapter{Eventual Consistency Convergence Times} \label{convt}
 
-% TODO: introduce the table
+These values measure the time for my sloppy quorum system to converge on a strongly consistent state, with large numbers (10---100) of database nodes. The methodology is described in chapter 4. Each test with $N$ nodes has write quorum size $W = N / 2 + 1$ and read quorum size $R = 1$.
 
 \begin{longtable}{@{} l l l l l l l @{}}
 \toprule
